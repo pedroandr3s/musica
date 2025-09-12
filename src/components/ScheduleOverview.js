@@ -2,7 +2,7 @@ import React from 'react';
 import { getPhaseLabel } from '../utils/helpers';
 import styles from '../styles/styles';
 
-const ScheduleOverview = ({ bands, currentBandIndex, onSelectBand, getTotalTime }) => {
+const ScheduleOverview = ({ bands, currentBandIndex, onSelectBand, onReorderBands, getTotalTime }) => {
   return (
     <div style={styles.card}>
       <div style={styles.flexBetween}>

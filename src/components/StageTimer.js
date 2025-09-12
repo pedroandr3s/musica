@@ -1,19 +1,56 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import AdminView from './AdminView';
+import BandView from './BandView';
 import NotificationSystem from './NotificationSystem';
 import { formatTime, getPhaseLabel } from '../utils/helpers';
+import { DEFAULT_BANDS } from '../config/constants';
+import { useFirebase } from '../hooks/useFirebase';
 
 const StageTimer = () => {
-  const [bands, setBands] = useState([
-    { id: 1, name: 'Osyan', setupTime: 30, showTime: 45, teardownTime: 15, status: 'waiting', phase: 'setup', timeRemaining: 30 * 60 },
-    { id: 2, name: 'Wofo', setupTime: 45, showTime: 60, teardownTime: 20, status: 'waiting', phase: 'setup', timeRemaining: 45 * 60 },
-    { id: 3, name: 'Carnada', setupTime: 25, showTime: 30, teardownTime: 10, status: 'waiting', phase: 'setup', timeRemaining: 25 * 60 }
-  ]);
+  const [bands, setBands] = useState(DEFAULT_BANDS);
   const [currentBandIndex, setCurrentBandIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [displayWindow, setDisplayWindow] = useState(null);
+  const [bandWindow, setBandWindow] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notifications, setNotifications] = useState([]);
+  const [autoMode, setAutoMode] = useState(true);
+  const [currentView, setCurrentView] = useState('admin');
+
+  const { saveToFirebase, loadFromFirebase } = useFirebase();
+
+  // Load data from Firebase on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      const result = await loadFromFirebase();
+      if (result.success) {
+        const { bands: savedBands, currentBandIndex: savedIndex, autoMode: savedAutoMode } = result.data;
+        if (savedBands) setBands(savedBands);
+        if (typeof savedIndex === 'number') setCurrentBandIndex(savedIndex);
+        if (typeof savedAutoMode === 'boolean') setAutoMode(savedAutoMode);
+        addNotification('📥 Datos cargados desde la nube', 'success');
+      }
+    };
+    loadData();
+  }, [loadFromFirebase]);
+
+  // Save to Firebase when important data changes
+  useEffect(() => {
+    const saveData = async () => {
+      await saveToFirebase({
+        bands,
+        currentBandIndex,
+        autoMode,
+        lastUpdated: new Date().toISOString()
+      });
+    };
+    
+    // Debounce save to avoid too frequent calls
+    const timeoutId = setTimeout(saveData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [bands, currentBandIndex, autoMode, saveToFirebase]);
 
   // Enhanced audio context for notifications
   const playSound = useCallback((frequency = 800, duration = 200) => {
@@ -47,7 +84,7 @@ const StageTimer = () => {
     }, 5000);
   };
 
-  // Enhanced timer with warnings
+  // Enhanced timer with auto/manual mode
   useEffect(() => {
     let interval = null;
     if (isRunning && currentBandIndex < bands.length) {
@@ -85,23 +122,50 @@ const StageTimer = () => {
               currentBand.timeRemaining = currentBand.showTime * 60;
               currentBand.status = 'waiting';
               addNotification(`✅ ${currentBand.name} - Montaje completado. ¡Hora del show!`, 'success');
+              
+              // Auto mode: automatically start next phase
+              if (autoMode) {
+                setTimeout(() => {
+                  setIsRunning(true);
+                  currentBand.status = 'active';
+                }, 2000);
+              }
             } else if (currentBand.phase === 'show') {
               currentBand.phase = 'teardown';
               currentBand.timeRemaining = currentBand.teardownTime * 60;
               currentBand.status = 'waiting';
               addNotification(`🎵 ${currentBand.name} - Show terminado. Tiempo de desmontaje`, 'success');
+              
+              // Auto mode: automatically start teardown
+              if (autoMode) {
+                setTimeout(() => {
+                  setIsRunning(true);
+                  currentBand.status = 'active';
+                }, 2000);
+              }
             } else {
               currentBand.status = 'finished';
               addNotification(`🎉 ${currentBand.name} - ¡Presentación completa!`, 'success');
+              
+              // Auto mode: move to next band
+              if (autoMode && currentBandIndex < bands.length - 1) {
+                setTimeout(() => {
+                  setCurrentBandIndex(prev => prev + 1);
+                  addNotification(`🎸 Auto-cambio a: ${bands[currentBandIndex + 1].name}`, 'info');
+                }, 3000);
+              }
             }
-            setIsRunning(false);
+            
+            if (!autoMode) {
+              setIsRunning(false);
+            }
           }
           return newBands;
         });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isRunning, currentBandIndex, bands.length, playSound]);
+  }, [isRunning, currentBandIndex, bands.length, playSound, autoMode, addNotification]);
 
   // Timer control functions
   const startTimer = () => {
@@ -170,6 +234,17 @@ const StageTimer = () => {
     addNotification(`🎸 Banda seleccionada: ${bands[index].name}`, 'info');
   };
 
+  // Reorder bands function for drag and drop
+  const reorderBands = useCallback((dragIndex, hoverIndex) => {
+    setBands(prevBands => {
+      const newBands = [...prevBands];
+      const draggedBand = newBands[dragIndex];
+      newBands.splice(dragIndex, 1);
+      newBands.splice(hoverIndex, 0, draggedBand);
+      return newBands;
+    });
+  }, []);
+
   // Band management functions
   const addBand = (bandData) => {
     const newBand = {
@@ -219,7 +294,7 @@ const StageTimer = () => {
       total + band.setupTime + band.showTime + band.teardownTime, 0);
   };
 
-  // Display window management
+  // Display window management with responsive design
   const openDisplayWindow = () => {
     const newDisplayWindow = window.open('', 'StageDisplay', 'width=1920,height=1080,fullscreen=yes');
     if (newDisplayWindow) {
@@ -231,8 +306,14 @@ const StageTimer = () => {
         <head>
           <title>Stage Timer - Display</title>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
-            body { margin: 0; font-family: Arial, sans-serif; }
+            * { box-sizing: border-box; }
+            body { 
+              margin: 0; 
+              font-family: Arial, sans-serif; 
+              overflow: hidden;
+            }
             @keyframes pulse {
               0%, 100% { opacity: 1; }
               50% { opacity: 0.5; }
@@ -241,10 +322,20 @@ const StageTimer = () => {
               from { transform: translateX(100%); opacity: 0; }
               to { transform: translateX(0); opacity: 1; }
             }
+            @media (max-width: 768px) {
+              .timer { font-size: 4rem !important; }
+              .band-name { font-size: 2rem !important; }
+              .phase { font-size: 1.5rem !important; }
+            }
+            @media (min-width: 769px) and (max-width: 1200px) {
+              .timer { font-size: 6rem !important; }
+              .band-name { font-size: 3rem !important; }
+              .phase { font-size: 2rem !important; }
+            }
           </style>
         </head>
         <body>
-          <div id="display-root">Cargando visualizador...</div>
+          <div id="display-root">Inicializando visualizador...</div>
         </body>
         </html>
       `);
@@ -255,30 +346,81 @@ const StageTimer = () => {
     }
   };
 
-  // Update display window content
+  // Band view window management
+  const openBandWindow = () => {
+    const newBandWindow = window.open('', 'BandView', 'width=1200,height=800');
+    if (newBandWindow) {
+      setBandWindow(newBandWindow);
+      
+      newBandWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Stage Timer - Band View</title>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            * { box-sizing: border-box; }
+            body { 
+              margin: 0; 
+              font-family: Arial, sans-serif;
+              background-color: #1a1a1a;
+              color: white;
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.5; }
+            }
+          </style>
+        </head>
+        <body>
+          <div id="band-root">Cargando vista de banda...</div>
+        </body>
+        </html>
+      `);
+      
+      addNotification('🎸 Vista de banda abierta en nueva ventana', 'success');
+    } else {
+      addNotification('❌ No se pudo abrir la vista de banda', 'error');
+    }
+  };
+
+  // Update display window content with responsive design and fixed progress bar
   useEffect(() => {
     if (displayWindow && !displayWindow.closed) {
       const currentBand = bands[currentBandIndex];
+      const totalPhaseTime = currentBand ? (
+        currentBand.phase === 'setup' ? currentBand.setupTime * 60 :
+        currentBand.phase === 'show' ? currentBand.showTime * 60 :
+        currentBand.teardownTime * 60
+      ) : 0;
+      
+      const progressPercentage = currentBand ? 
+        Math.max(0, ((totalPhaseTime - currentBand.timeRemaining) / totalPhaseTime) * 100) : 0;
+      
       const displayContent = `
         <div style="
           min-height: 100vh;
           background-color: #1a1a1a;
           color: white;
           font-family: Arial, sans-serif;
+          display: flex;
+          flex-direction: column;
         ">
           <!-- Header -->
           <div style="
             background-color: #2d3748;
-            padding: 16px;
+            padding: 1vh 2vw;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
           ">
-            <div style="display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: bold;">
+            <div style="display: flex; align-items: center; gap: 1vw; font-size: clamp(1.2rem, 3vw, 2rem); font-weight: bold;">
               🕐 Stage Timer
             </div>
-            <div style="display: flex; gap: 16px; align-items: center;">
-              ${currentBand ? `<div style="font-size: 14px; color: #a0aec0;">${currentBandIndex + 1}/${bands.length}</div>` : ''}
+            <div style="display: flex; gap: 2vw; align-items: center; font-size: clamp(0.8rem, 2vw, 1.2rem);">
+              ${currentBand ? `<div style="color: #a0aec0;">${currentBandIndex + 1}/${bands.length}</div>` : ''}
               <div style="color: ${soundEnabled ? '#68d391' : '#a0aec0'};">
                 ${soundEnabled ? '🔊' : '🔇'}
               </div>
@@ -292,18 +434,25 @@ const StageTimer = () => {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 32px;
+            padding: 2vh 2vw;
+            text-align: center;
           ">
             ${currentBand ? `
-              <div style="font-size: 4rem; font-weight: bold; margin-bottom: 32px; text-align: center;">
+              <div class="band-name" style="
+                font-size: clamp(2rem, 8vw, 6rem); 
+                font-weight: bold; 
+                margin-bottom: 2vh; 
+                line-height: 1.2;
+                word-break: break-word;
+              ">
                 ${currentBand.name}
               </div>
               
-              <div style="
-                font-size: 8rem;
+              <div class="timer" style="
+                font-size: clamp(4rem, 15vw, 12rem);
                 font-family: monospace;
                 font-weight: bold;
-                margin-bottom: 32px;
+                margin-bottom: 2vh;
                 color: ${currentBand.timeRemaining <= 30 && currentBand.status === 'active' ? '#f56565' :
                         currentBand.timeRemaining <= 300 && currentBand.status === 'active' ? '#f56565' : 
                         currentBand.timeRemaining <= 600 && currentBand.status === 'active' ? '#f6ad55' : 
@@ -314,12 +463,12 @@ const StageTimer = () => {
                 ${formatTime(currentBand.timeRemaining)}
               </div>
 
-              <div style="
-                font-size: 3rem;
+              <div class="phase" style="
+                font-size: clamp(1.5rem, 5vw, 3rem);
                 font-weight: bold;
-                padding: 16px 32px;
+                padding: 1vh 3vw;
                 border-radius: 50px;
-                margin-bottom: 32px;
+                margin-bottom: 3vh;
                 background-color: ${currentBand.status === 'waiting' ? 
                   (currentBand.phase === 'setup' ? '#d69e2e' :
                    currentBand.phase === 'show' ? '#38a169' :
@@ -339,13 +488,14 @@ const StageTimer = () => {
               </div>
 
               <!-- Progress Bar -->
-              <div style="width: 100%; max-width: 800px; margin-top: 32px;">
+              <div style="width: min(90vw, 800px); margin-top: 2vh;">
                 <div style="
                   width: 100%;
-                  height: 24px;
+                  height: clamp(16px, 2vh, 32px);
                   background-color: #4a5568;
                   border-radius: 12px;
                   overflow: hidden;
+                  position: relative;
                 ">
                   <div style="
                     height: 100%;
@@ -355,34 +505,26 @@ const StageTimer = () => {
                                        currentBand.timeRemaining <= 600 && currentBand.status === 'active' ? '#f6ad55' : 
                                        currentBand.phase === 'show' ? '#68d391' :
                                        currentBand.phase === 'teardown' ? '#f6ad55' : '#63b3ed'};
-                    width: ${Math.max(0, (currentBand.timeRemaining / (
-                      currentBand.phase === 'setup' ? currentBand.setupTime * 60 :
-                      currentBand.phase === 'show' ? currentBand.showTime * 60 :
-                      currentBand.teardownTime * 60
-                    )) * 100)}%;
+                    width: ${progressPercentage}%;
                   "></div>
                 </div>
                 
                 <div style="
                   display: flex;
                   justify-content: space-between;
-                  margin-top: 8px;
-                  font-size: 14px;
+                  margin-top: 1vh;
+                  font-size: clamp(0.8rem, 2vw, 1rem);
                   color: #a0aec0;
                 ">
                   <span>0:00</span>
-                  <span>${formatTime(
-                    currentBand.phase === 'setup' ? currentBand.setupTime * 60 :
-                    currentBand.phase === 'show' ? currentBand.showTime * 60 :
-                    currentBand.teardownTime * 60
-                  )}</span>
+                  <span>${formatTime(totalPhaseTime)}</span>
                 </div>
               </div>
 
               ${currentBand.timeRemaining <= 300 && currentBand.status === 'active' ? `
                 <div style="
-                  margin-top: 32px;
-                  font-size: 2rem;
+                  margin-top: 3vh;
+                  font-size: clamp(1.2rem, 4vw, 2.5rem);
                   font-weight: bold;
                   text-align: center;
                   color: ${currentBand.timeRemaining <= 30 ? '#f56565' : '#f6ad55'};
@@ -397,19 +539,19 @@ const StageTimer = () => {
               ` : ''}
 
               ${currentBandIndex < bands.length - 1 ? `
-                <div style="margin-top: 32px; text-align: center;">
-                  <div style="font-size: 18px; color: #a0aec0;">Siguiente:</div>
-                  <div style="font-size: 2rem; font-weight: bold; color: #e2e8f0;">
+                <div style="margin-top: 3vh; text-align: center;">
+                  <div style="font-size: clamp(1rem, 3vw, 1.5rem); color: #a0aec0;">Siguiente:</div>
+                  <div style="font-size: clamp(1.5rem, 4vw, 2.5rem); font-weight: bold; color: #e2e8f0;">
                     ${bands[currentBandIndex + 1].name}
                   </div>
                 </div>
               ` : ''}
             ` : `
               <div style="text-align: center;">
-                <div style="font-size: 4rem; color: #a0aec0; margin-bottom: 16px;">
+                <div style="font-size: clamp(2rem, 6vw, 4rem); color: #a0aec0; margin-bottom: 2vh;">
                   No hay bandas programadas
                 </div>
-                <div style="font-size: 20px; color: #718096;">
+                <div style="font-size: clamp(1rem, 3vw, 1.5rem); color: #718096;">
                   Agrega bandas en el panel de administración
                 </div>
               </div>
@@ -417,15 +559,15 @@ const StageTimer = () => {
           </div>
 
           <!-- Bottom Info -->
-          <div style="background-color: #2d3748; padding: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div style="font-size: 18px;">
+          <div style="background-color: #2d3748; padding: 1vh 2vw; flex-shrink: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+              <div style="font-size: clamp(1rem, 3vw, 1.5rem);">
                 ${currentBand ? `
                   Banda ${currentBandIndex + 1} de ${bands.length} - ${getPhaseLabel(currentBand.phase)}
-                  ${currentBand.status === 'active' ? '<span style="margin-left: 8px; color: #63b3ed;">● EN VIVO</span>' : ''}
+                  ${currentBand.status === 'active' ? '<span style="margin-left: 1vw; color: #63b3ed;">● EN VIVO</span>' : ''}
                 ` : 'Sin bandas programadas'}
               </div>
-              <div style="display: flex; gap: 16px; align-items: center; font-size: 18px;">
+              <div style="display: flex; gap: 2vw; align-items: center; font-size: clamp(0.9rem, 2.5vw, 1.2rem);">
                 ${currentBand ? `
                   <span>
                     Tiempo asignado: ${
@@ -434,17 +576,17 @@ const StageTimer = () => {
                       currentBand.teardownTime
                     } minutos
                   </span>
-                  <div style="display: flex; gap: 4px;">
+                  <div style="display: flex; gap: 0.5vw;">
                     <div style="
-                      width: 12px; height: 12px; border-radius: 4px;
+                      width: 1vw; height: 1vw; border-radius: 4px;
                       background-color: ${currentBand.phase === 'setup' ? '#f6ad55' : '#4a5568'};
                     " title="Montaje"></div>
                     <div style="
-                      width: 12px; height: 12px; border-radius: 4px;
+                      width: 1vw; height: 1vw; border-radius: 4px;
                       background-color: ${currentBand.phase === 'show' ? '#68d391' : '#4a5568'};
                     " title="Show"></div>
                     <div style="
-                      width: 12px; height: 12px; border-radius: 4px;
+                      width: 1vw; height: 1vw; border-radius: 4px;
                       background-color: ${currentBand.phase === 'teardown' ? '#f6ad55' : '#4a5568'};
                     " title="Desmontaje"></div>
                   </div>
@@ -462,20 +604,81 @@ const StageTimer = () => {
     }
   }, [bands, currentBandIndex, isRunning, soundEnabled, displayWindow]);
 
-  // Clean up display window on unmount
+  // Update band window content  
+  useEffect(() => {
+    if (bandWindow && !bandWindow.closed) {
+      const currentBand = bands[currentBandIndex];
+      const bandContent = `
+        <div style="
+          min-height: 100vh;
+          background-color: #1a1a1a;
+          color: white;
+          padding: 2vh 2vw;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        ">
+          ${currentBand ? `
+            <div style="font-size: 3rem; font-weight: bold; margin-bottom: 2vh; text-align: center;">
+              ${currentBand.name}
+            </div>
+            <div style="
+              font-size: 6rem;
+              font-family: monospace;
+              font-weight: bold;
+              margin-bottom: 2vh;
+              color: ${currentBand.timeRemaining <= 300 ? '#f56565' : '#63b3ed'};
+            ">
+              ${formatTime(currentBand.timeRemaining)}
+            </div>
+            <div style="
+              font-size: 2rem;
+              padding: 1vh 2vw;
+              border-radius: 25px;
+              background-color: ${currentBand.phase === 'setup' ? '#d69e2e' :
+                                currentBand.phase === 'show' ? '#38a169' : '#dd6b20'};
+            ">
+              ${getPhaseLabel(currentBand.phase)}
+            </div>
+            <div style="margin-top: 3vh; text-align: center;">
+              <div style="font-size: 1.2rem; color: #a0aec0;">Estado:</div>
+              <div style="font-size: 1.5rem; color: ${currentBand.status === 'active' ? '#63b3ed' : '#f6ad55'};">
+                ${currentBand.status === 'waiting' ? 'Esperando' :
+                  currentBand.status === 'active' ? 'EN VIVO' : 'Finalizada'}
+              </div>
+            </div>
+          ` : `
+            <div>No hay banda seleccionada</div>
+          `}
+        </div>
+      `;
+      
+      const bandRoot = bandWindow.document.getElementById('band-root');
+      if (bandRoot) {
+        bandRoot.innerHTML = bandContent;
+      }
+    }
+  }, [bands, currentBandIndex, isRunning, bandWindow]);
+
+  // Clean up windows on unmount
   useEffect(() => {
     return () => {
       if (displayWindow && !displayWindow.closed) {
         displayWindow.close();
       }
+      if (bandWindow && !bandWindow.closed) {
+        bandWindow.close();
+      }
     };
-  }, [displayWindow]);
+  }, [displayWindow, bandWindow]);
 
   // Export/Import functions
   const exportSchedule = () => {
     const data = {
       bands,
       currentBandIndex,
+      autoMode,
       exportDate: new Date().toISOString(),
       totalTime: getTotalTime()
     };
@@ -499,6 +702,9 @@ const StageTimer = () => {
           if (data.bands) {
             setBands(data.bands);
             setCurrentBandIndex(data.currentBandIndex || 0);
+            if (typeof data.autoMode === 'boolean') {
+              setAutoMode(data.autoMode);
+            }
             addNotification('📂 Cronograma importado exitosamente', 'success');
           }
         } catch (error) {
@@ -509,14 +715,30 @@ const StageTimer = () => {
     }
   };
 
+  if (currentView === 'band') {
+    return (
+      <>
+        <BandView
+          band={bands[currentBandIndex]}
+          currentBandIndex={currentBandIndex}
+          totalBands={bands.length}
+          onBackToAdmin={() => setCurrentView('admin')}
+        />
+        <NotificationSystem notifications={notifications} />
+      </>
+    );
+  }
+
   return (
-    <>
+    <DndProvider backend={HTML5Backend}>
       <AdminView
         bands={bands}
         currentBandIndex={currentBandIndex}
         isRunning={isRunning}
         soundEnabled={soundEnabled}
+        autoMode={autoMode}
         setSoundEnabled={setSoundEnabled}
+        setAutoMode={setAutoMode}
         onStartTimer={startTimer}
         onPauseTimer={pauseTimer}
         onResetCurrentBand={resetCurrentBand}
@@ -526,13 +748,16 @@ const StageTimer = () => {
         onAddBand={addBand}
         onDeleteBand={deleteBand}
         onUpdateBand={updateBand}
+        onReorderBands={reorderBands}
         onOpenDisplayWindow={openDisplayWindow}
+        onOpenBandWindow={openBandWindow}
         onExportSchedule={exportSchedule}
         onImportSchedule={importSchedule}
+        onSwitchToBandView={() => setCurrentView('band')}
         getTotalTime={getTotalTime}
       />
       <NotificationSystem notifications={notifications} />
-    </>
+    </DndProvider>
   );
 };
 

@@ -3,7 +3,7 @@ import { Edit3, Trash2 } from 'lucide-react';
 import { formatTime, getPhaseLabel } from '../utils/helpers';
 import styles from '../styles/styles';
 
-const BandsList = ({ bands, currentBandIndex, onSelectBand, onEditBand, onDeleteBand }) => {
+const BandsList = ({ bands, currentBandIndex, onSelectBand, onEditBand, onDeleteBand, onReorderBands }) => {
   return (
     <div style={styles.card}>
       <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
