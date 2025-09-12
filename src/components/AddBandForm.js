@@ -9,7 +9,7 @@ const AddBandForm = ({ onAddBand }) => {
   const [newBandTeardown, setNewBandTeardown] = useState('');
 
   const handleAddBand = () => {
-    if (newBandName && newBandSetup && newBandShow && newBandTeardown && 
+    if (newBandName && newBandSetup && newBandShow && newBandTeardown &&
         !isNaN(newBandSetup) && !isNaN(newBandShow) && !isNaN(newBandTeardown)) {
       
       onAddBand({
@@ -18,7 +18,7 @@ const AddBandForm = ({ onAddBand }) => {
         showTime: parseInt(newBandShow),
         teardownTime: parseInt(newBandTeardown)
       });
-      
+
       // Clear form
       setNewBandName('');
       setNewBandSetup('');

@@ -21,20 +21,21 @@ const StageTimer = () => {
 
   const { saveToFirebase, loadFromFirebase } = useFirebase();
 
-  // Load data from Firebase on component mount
-  useEffect(() => {
-    const loadData = async () => {
-      const result = await loadFromFirebase();
-      if (result.success) {
-        const { bands: savedBands, currentBandIndex: savedIndex, autoMode: savedAutoMode } = result.data;
-        if (savedBands) setBands(savedBands);
-        if (typeof savedIndex === 'number') setCurrentBandIndex(savedIndex);
-        if (typeof savedAutoMode === 'boolean') setAutoMode(savedAutoMode);
-        addNotification('📥 Datos cargados desde la nube', 'success');
-      }
-    };
-    loadData();
-  }, [loadFromFirebase]);
+  // Save to Firebase when important data changes
+useEffect(() => {
+  const saveData = async () => {
+    await saveToFirebase({
+      bands,
+      currentBandIndex,
+      autoMode,
+      lastUpdated: new Date().toISOString()
+    });
+  };
+  
+  // Debounce save to avoid too frequent calls
+  const timeoutId = setTimeout(saveData, 1000);
+  return () => clearTimeout(timeoutId);
+}, [bands, currentBandIndex, autoMode, saveToFirebase]);
 
   // Save to Firebase when important data changes
   useEffect(() => {
