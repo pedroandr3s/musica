@@ -97,20 +97,24 @@ const AddBandForm = ({ onBandAdded }) => {
       // Agregar nueva banda
       const updatedBands = [...currentBands, newBand];
 
-      // Preparar datos para guardar
+      // Preparar datos para guardar - preservar datos existentes
       const dataToSave = {
         bands: updatedBands,
         lastUpdated: new Date().toISOString(),
         totalBands: updatedBands.length,
-        // Mantener otros datos existentes
-        ...(currentData.success && currentData.data ? {
-          currentBandIndex: currentData.data.currentBandIndex || 0,
-          autoMode: currentData.data.autoMode !== undefined ? currentData.data.autoMode : true
-        } : { 
-          currentBandIndex: 0,
-          autoMode: true 
-        })
+        // Mantener TODOS los datos existentes
+        currentBandIndex: currentData.success && currentData.data?.currentBandIndex !== undefined ? 
+          currentData.data.currentBandIndex : 0,
+        autoMode: currentData.success && currentData.data?.autoMode !== undefined ? 
+          currentData.data.autoMode : true,
+        // Preservar cualquier otro campo que pueda existir
+        ...currentData.data
       };
+
+      // Actualizar solo el array de bandas y timestamp, manteniendo el resto
+      dataToSave.bands = updatedBands;
+      dataToSave.lastUpdated = new Date().toISOString();
+      dataToSave.totalBands = updatedBands.length;
 
       // Guardar en Firebase
       const result = await saveToFirebase(dataToSave);

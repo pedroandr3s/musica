@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatTime, getPhaseLabel } from '../utils/helpers';
 
-const TimerDisplay = ({ bands, currentBandIndex }) => {
+const TimerDisplay = ({ bands, currentBandIndex, isMobile }) => {
   const currentBand = bands[currentBandIndex];
 
   if (!currentBand) {
@@ -9,16 +9,24 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
       <div style={{
         backgroundColor: '#1a1a1a',
         color: 'white',
-        padding: '40px',
+        padding: isMobile ? '20px' : '40px',
         borderRadius: '12px',
         textAlign: 'center',
         marginBottom: '20px'
       }}>
-        <div style={{ fontSize: '48px', marginBottom: '20px' }}>🎵</div>
-        <h2 style={{ fontSize: '24px', color: '#a0aec0', margin: 0 }}>
+        <div style={{ fontSize: isMobile ? '32px' : '48px', marginBottom: '20px' }}>🎵</div>
+        <h2 style={{ 
+          fontSize: isMobile ? '18px' : '24px', 
+          color: '#a0aec0', 
+          margin: 0 
+        }}>
           No hay bandas programadas
         </h2>
-        <p style={{ color: '#718096', marginTop: '8px' }}>
+        <p style={{ 
+          color: '#718096', 
+          marginTop: '8px',
+          fontSize: isMobile ? '14px' : '16px'
+        }}>
           Agrega bandas para comenzar
         </p>
       </div>
@@ -70,16 +78,16 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
     <div style={{
       backgroundColor: '#1a1a1a',
       color: 'white',
-      padding: '40px',
+      padding: isMobile ? '20px' : '40px',
       borderRadius: '12px',
       textAlign: 'center',
       marginBottom: '20px'
     }}>
       {/* Band Name */}
       <div style={{
-        fontSize: 'clamp(1.5rem, 4vw, 3rem)',
+        fontSize: isMobile ? 'clamp(1.2rem, 8vw, 2rem)' : 'clamp(1.5rem, 4vw, 3rem)',
         fontWeight: 'bold',
-        marginBottom: '20px',
+        marginBottom: isMobile ? '15px' : '20px',
         lineHeight: 1.2,
         wordBreak: 'break-word'
       }}>
@@ -88,10 +96,10 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
 
       {/* Timer */}
       <div style={{
-        fontSize: 'clamp(3rem, 8vw, 6rem)',
+        fontSize: isMobile ? 'clamp(2.5rem, 15vw, 4rem)' : 'clamp(3rem, 8vw, 6rem)',
         fontFamily: 'monospace',
         fontWeight: 'bold',
-        marginBottom: '20px',
+        marginBottom: isMobile ? '15px' : '20px',
         color: getPhaseColor(),
         animation: shouldPulse ? 'pulse 1s infinite' : 'none'
       }}>
@@ -100,11 +108,11 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
 
       {/* Status Badge */}
       <div style={{
-        fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+        fontSize: isMobile ? 'clamp(0.8rem, 4vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.5rem)',
         fontWeight: 'bold',
-        padding: '12px 24px',
+        padding: isMobile ? '8px 16px' : '12px 24px',
         borderRadius: '25px',
-        marginBottom: '30px',
+        marginBottom: isMobile ? '20px' : '30px',
         backgroundColor: getStatusBackgroundColor(),
         display: 'inline-block',
         animation: shouldPulse ? 'pulse 1s infinite' : 'none'
@@ -113,18 +121,21 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
       </div>
 
       {/* Progress Bar */}
-      <div style={{ maxWidth: '600px', margin: '0 auto 30px' }}>
+      <div style={{ 
+        maxWidth: isMobile ? '100%' : '600px', 
+        margin: `0 auto ${isMobile ? '20px' : '30px'}` 
+      }}>
         <div style={{
           width: '100%',
-          height: '20px',
+          height: isMobile ? '12px' : '20px',
           backgroundColor: '#4a5568',
-          borderRadius: '10px',
+          borderRadius: isMobile ? '6px' : '10px',
           overflow: 'hidden',
           position: 'relative'
         }}>
           <div style={{
             height: '100%',
-            borderRadius: '10px',
+            borderRadius: isMobile ? '6px' : '10px',
             transition: 'width 1s ease',
             backgroundColor: getPhaseColor(),
             width: `${progressPercentage}%`
@@ -135,7 +146,7 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
           display: 'flex',
           justifyContent: 'space-between',
           marginTop: '8px',
-          fontSize: '14px',
+          fontSize: isMobile ? '12px' : '14px',
           color: '#a0aec0'
         }}>
           <span>0:00</span>
@@ -146,12 +157,12 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
       {/* Warning Messages */}
       {currentBand.timeRemaining <= 300 && currentBand.status === 'active' && (
         <div style={{
-          fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+          fontSize: isMobile ? 'clamp(0.9rem, 4vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.5rem)',
           fontWeight: 'bold',
           textAlign: 'center',
           color: currentBand.timeRemaining <= 30 ? '#f56565' : '#f6ad55',
           animation: currentBand.timeRemaining <= 30 ? 'pulse 1s infinite' : 'none',
-          marginBottom: '20px'
+          marginBottom: isMobile ? '15px' : '20px'
         }}>
           {currentBand.timeRemaining <= 10 ? '¡TIEMPO AGOTADO!' :
            currentBand.timeRemaining <= 30 ? '¡30 SEGUNDOS!' :
@@ -165,27 +176,27 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
       <div style={{
         display: 'flex',
         justifyContent: 'center',
-        gap: '8px',
-        marginBottom: '20px'
+        gap: isMobile ? '6px' : '8px',
+        marginBottom: isMobile ? '15px' : '20px'
       }}>
         <div style={{
-          width: '12px',
-          height: '12px',
-          borderRadius: '6px',
+          width: isMobile ? '8px' : '12px',
+          height: isMobile ? '8px' : '12px',
+          borderRadius: isMobile ? '4px' : '6px',
           backgroundColor: currentBand.phase === 'setup' ? '#f6ad55' : '#4a5568',
           transition: 'all 0.3s'
         }} title="Montaje"></div>
         <div style={{
-          width: '12px',
-          height: '12px',
-          borderRadius: '6px',
+          width: isMobile ? '8px' : '12px',
+          height: isMobile ? '8px' : '12px',
+          borderRadius: isMobile ? '4px' : '6px',
           backgroundColor: currentBand.phase === 'show' ? '#68d391' : '#4a5568',
           transition: 'all 0.3s'
         }} title="Show"></div>
         <div style={{
-          width: '12px',
-          height: '12px',
-          borderRadius: '6px',
+          width: isMobile ? '8px' : '12px',
+          height: isMobile ? '8px' : '12px',
+          borderRadius: isMobile ? '4px' : '6px',
           backgroundColor: currentBand.phase === 'teardown' ? '#f6ad55' : '#4a5568',
           transition: 'all 0.3s'
         }} title="Desmontaje"></div>
@@ -194,9 +205,9 @@ const TimerDisplay = ({ bands, currentBandIndex }) => {
       {/* Band Info */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-        gap: '12px',
-        fontSize: '14px',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: isMobile ? '8px' : '12px',
+        fontSize: isMobile ? '12px' : '14px',
         color: '#a0aec0'
       }}>
         <div>

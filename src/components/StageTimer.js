@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import BandView from './BandView';
-import NotificationSystem from './NotificationSystem';
 import TimerDisplay from './TimerDisplay';
 import TimerControls from './TimerControls';
 import WindowControls from './WindowControls';
@@ -18,18 +17,29 @@ const StageTimer = () => {
   const [displayWindow, setDisplayWindow] = useState(null);
   const [bandWindow, setBandWindow] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [notifications, setNotifications] = useState([]);
   const [autoMode, setAutoMode] = useState(true);
   const [currentView, setCurrentView] = useState('admin');
+  const [isMobile, setIsMobile] = useState(false);
 
   const { saveToFirebase, loadFromFirebase } = useFirebase();
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Load bands from Firebase on component mount
   useEffect(() => {
     const loadBands = async () => {
       try {
         const result = await loadFromFirebase();
-        if (result.success && result.data?.bands) {
+        if (result.success && result.data?.bands && result.data.bands.length > 0) {
           setBands(result.data.bands);
           if (result.data.currentBandIndex !== undefined) {
             setCurrentBandIndex(result.data.currentBandIndex);
@@ -37,11 +47,11 @@ const StageTimer = () => {
           if (result.data.autoMode !== undefined) {
             setAutoMode(result.data.autoMode);
           }
-          addNotification(`📥 ${result.data.bands.length} bandas cargadas desde Firebase`, 'success');
+        } else {
+          console.log('No bands found in Firebase - starting fresh');
         }
       } catch (error) {
         console.error('Error loading bands from Firebase:', error);
-        addNotification('❌ Error al cargar bandas desde Firebase', 'error');
       }
     };
 
@@ -50,16 +60,21 @@ const StageTimer = () => {
 
   // Save to Firebase when important data changes
   useEffect(() => {
+    if (bands.length === 0) return;
+    
     const saveData = async () => {
-      await saveToFirebase({
-        bands,
-        currentBandIndex,
-        autoMode,
-        lastUpdated: new Date().toISOString()
-      });
+      try {
+        await saveToFirebase({
+          bands,
+          currentBandIndex,
+          autoMode,
+          lastUpdated: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error saving to Firebase:', error);
+      }
     };
     
-    // Debounce save to avoid too frequent calls
     const timeoutId = setTimeout(saveData, 1000);
     return () => clearTimeout(timeoutId);
   }, [bands, currentBandIndex, autoMode, saveToFirebase]);
@@ -87,15 +102,6 @@ const StageTimer = () => {
     }
   }, [soundEnabled]);
 
-  // Add notification system
-  const addNotification = (message, type = 'info') => {
-    const id = Date.now();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
-  };
-
   // Enhanced timer with auto/manual mode
   useEffect(() => {
     let interval = null;
@@ -103,93 +109,84 @@ const StageTimer = () => {
       interval = setInterval(() => {
         setBands(prevBands => {
           const newBands = [...prevBands];
-          if (newBands[currentBandIndex] && newBands[currentBandIndex].timeRemaining > 0) {
-            newBands[currentBandIndex].timeRemaining -= 1;
-            newBands[currentBandIndex].status = 'active';
+          const currentBand = newBands[currentBandIndex];
+          
+          if (!currentBand) return newBands;
+          
+          if (currentBand.timeRemaining > 0) {
+            currentBand.timeRemaining -= 1;
+            currentBand.status = 'active';
             
-            // Warning sounds at 5 minutes, 2 minutes, 1 minute, and 30 seconds
-            const timeLeft = newBands[currentBandIndex].timeRemaining;
+            const timeLeft = currentBand.timeRemaining;
             if (timeLeft === 300) {
               playSound(600, 300);
-              addNotification('⚠️ 5 minutos restantes', 'warning');
             } else if (timeLeft === 120) {
               playSound(700, 300);
-              addNotification('⚠️ 2 minutos restantes', 'warning');
             } else if (timeLeft === 60) {
               playSound(800, 300);
-              addNotification('⚠️ 1 minuto restante', 'warning');
             } else if (timeLeft === 30) {
               playSound(900, 500);
-              addNotification('🚨 30 segundos restantes', 'error');
             } else if (timeLeft <= 10 && timeLeft > 0) {
               playSound(1000, 100);
             }
-            
-          } else if (newBands[currentBandIndex]) {
-            const currentBand = newBands[currentBandIndex];
+          } else {
             playSound(400, 800);
             
             if (currentBand.phase === 'setup') {
               currentBand.phase = 'show';
               currentBand.timeRemaining = currentBand.showTime * 60;
               currentBand.status = 'waiting';
-              addNotification(`✅ ${currentBand.name} - Montaje completado. ¡Hora del show!`, 'success');
               
-              // Auto mode: automatically start next phase
               if (autoMode) {
                 setTimeout(() => {
                   setIsRunning(true);
-                  currentBand.status = 'active';
                 }, 2000);
+              } else {
+                setIsRunning(false);
               }
+              
             } else if (currentBand.phase === 'show') {
               currentBand.phase = 'teardown';
               currentBand.timeRemaining = currentBand.teardownTime * 60;
               currentBand.status = 'waiting';
-              addNotification(`🎵 ${currentBand.name} - Show terminado. Tiempo de desmontaje`, 'success');
               
-              // Auto mode: automatically start teardown
               if (autoMode) {
                 setTimeout(() => {
                   setIsRunning(true);
-                  currentBand.status = 'active';
                 }, 2000);
+              } else {
+                setIsRunning(false);
               }
-            } else {
-              currentBand.status = 'finished';
-              addNotification(`🎉 ${currentBand.name} - ¡Presentación completa!`, 'success');
               
-              // Auto mode: move to next band
+            } else if (currentBand.phase === 'teardown') {
+              currentBand.status = 'finished';
+              
               if (autoMode && currentBandIndex < bands.length - 1) {
                 setTimeout(() => {
                   setCurrentBandIndex(prev => prev + 1);
-                  addNotification(`🎸 Auto-cambio a: ${bands[currentBandIndex + 1].name}`, 'info');
                 }, 3000);
+              } else {
+                setIsRunning(false);
               }
             }
-            
-            if (!autoMode) {
-              setIsRunning(false);
-            }
           }
+          
           return newBands;
         });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isRunning, currentBandIndex, bands.length, playSound, autoMode, addNotification]);
+  }, [isRunning, currentBandIndex, bands.length, playSound, autoMode]);
 
   // Timer control functions
   const startTimer = () => {
     if (currentBandIndex < bands.length) {
       setIsRunning(true);
-      addNotification(`🎬 Iniciando ${getPhaseLabel(bands[currentBandIndex].phase)} - ${bands[currentBandIndex].name}`, 'info');
     }
   };
 
   const pauseTimer = () => {
     setIsRunning(false);
-    addNotification('⏸️ Timer pausado', 'info');
   };
 
   const resetCurrentBand = () => {
@@ -203,7 +200,6 @@ const StageTimer = () => {
         return newBands;
       });
       setIsRunning(false);
-      addNotification('🔄 Banda reiniciada al montaje', 'info');
     }
   };
 
@@ -216,14 +212,11 @@ const StageTimer = () => {
         if (currentBand.phase === 'setup') {
           currentBand.phase = 'show';
           currentBand.timeRemaining = currentBand.showTime * 60;
-          addNotification(`🎵 ${currentBand.name} - Iniciando show`, 'success');
         } else if (currentBand.phase === 'show') {
           currentBand.phase = 'teardown';
           currentBand.timeRemaining = currentBand.teardownTime * 60;
-          addNotification(`📦 ${currentBand.name} - Iniciando desmontaje`, 'success');
         } else {
           currentBand.status = 'finished';
-          addNotification(`✅ ${currentBand.name} - Finalizada`, 'success');
         }
         currentBand.status = 'waiting';
         return newBands;
@@ -236,14 +229,12 @@ const StageTimer = () => {
     if (currentBandIndex < bands.length - 1) {
       setCurrentBandIndex(currentBandIndex + 1);
       setIsRunning(false);
-      addNotification(`🎸 Cambiando a: ${bands[currentBandIndex + 1].name}`, 'info');
     }
   };
 
   const selectBand = (index) => {
     setCurrentBandIndex(index);
     setIsRunning(false);
-    addNotification(`🎸 Banda seleccionada: ${bands[index].name}`, 'info');
   };
 
   // Reorder bands function for drag and drop
@@ -257,19 +248,6 @@ const StageTimer = () => {
     });
   }, []);
 
-  // Band management functions
-  const addBand = (bandData) => {
-    const newBand = {
-      id: Date.now(),
-      ...bandData,
-      status: 'waiting',
-      phase: 'setup',
-      timeRemaining: bandData.setupTime * 60
-    };
-    setBands([...bands, newBand]);
-    addNotification(`➕ Banda "${newBand.name}" agregada`, 'success');
-  };
-
   // Reload bands from Firebase
   const reloadBandsFromFirebase = async () => {
     try {
@@ -282,21 +260,15 @@ const StageTimer = () => {
         if (result.data.autoMode !== undefined) {
           setAutoMode(result.data.autoMode);
         }
-        addNotification(`🔄 ${result.data.bands.length} bandas recargadas desde Firebase`, 'success');
-      } else {
-        addNotification('⚠️ No se encontraron bandas en Firebase', 'warning');
       }
     } catch (error) {
       console.error('Error reloading bands from Firebase:', error);
-      addNotification('❌ Error al recargar bandas desde Firebase', 'error');
     }
   };
 
   // Handle when a new band is added from the form
   const handleBandAdded = async (newBand) => {
-    // Automatically reload bands from Firebase to sync with the new addition
     await reloadBandsFromFirebase();
-    addNotification(`✅ Nueva banda "${newBand.name}" agregada y sincronizada`, 'success');
   };
 
   const deleteBand = (id, name) => {
@@ -304,7 +276,6 @@ const StageTimer = () => {
     if (currentBandIndex >= bands.length - 1) {
       setCurrentBandIndex(Math.max(0, bands.length - 2));
     }
-    addNotification(`🗑️ Banda "${name}" eliminada`, 'info');
   };
 
   const updateBand = (updatedBand) => {
@@ -326,7 +297,6 @@ const StageTimer = () => {
       }
       return band;
     }));
-    addNotification(`✏️ Banda "${updatedBand.name}" actualizada`, 'success');
   };
 
   // Utility functions
@@ -359,10 +329,6 @@ const StageTimer = () => {
               0%, 100% { opacity: 1; }
               50% { opacity: 0.5; }
             }
-            @keyframes slideIn {
-              from { transform: translateX(100%); opacity: 0; }
-              to { transform: translateX(0); opacity: 1; }
-            }
             @media (max-width: 768px) {
               .timer { font-size: 4rem !important; }
               .band-name { font-size: 2rem !important; }
@@ -380,10 +346,6 @@ const StageTimer = () => {
         </body>
         </html>
       `);
-      
-      addNotification('📺 Visualizador abierto en nueva ventana', 'success');
-    } else {
-      addNotification('❌ No se pudo abrir el visualizador. Verifica que los pop-ups estén habilitados.', 'error');
     }
   };
 
@@ -418,10 +380,6 @@ const StageTimer = () => {
         </body>
         </html>
       `);
-      
-      addNotification('🎸 Vista de banda abierta en nueva ventana', 'success');
-    } else {
-      addNotification('❌ No se pudo abrir la vista de banda', 'error');
     }
   };
 
@@ -441,7 +399,6 @@ const StageTimer = () => {
     a.download = `stage-schedule-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    addNotification('📊 Cronograma exportado', 'success');
   };
 
   const importSchedule = (event) => {
@@ -457,10 +414,9 @@ const StageTimer = () => {
             if (typeof data.autoMode === 'boolean') {
               setAutoMode(data.autoMode);
             }
-            addNotification('📂 Cronograma importado exitosamente', 'success');
           }
         } catch (error) {
-          addNotification('❌ Error al importar cronograma', 'error');
+          console.error('Error importing schedule:', error);
         }
       };
       reader.readAsText(file);
@@ -489,7 +445,6 @@ const StageTimer = () => {
           display: flex;
           flex-direction: column;
         ">
-          <!-- Header -->
           <div style="
             background-color: #2d3748;
             padding: 1vh 2vw;
@@ -509,7 +464,6 @@ const StageTimer = () => {
             </div>
           </div>
 
-          <!-- Main Display -->
           <div style="
             flex: 1;
             display: flex;
@@ -569,7 +523,6 @@ const StageTimer = () => {
                   'FINALIZADO'}
               </div>
 
-              <!-- Progress Bar -->
               <div style="width: min(90vw, 800px); margin-top: 2vh;">
                 <div style="
                   width: 100%;
@@ -640,7 +593,6 @@ const StageTimer = () => {
             `}
           </div>
 
-          <!-- Bottom Info -->
           <div style="background-color: #2d3748; padding: 1vh 2vw; flex-shrink: 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
               <div style="font-size: clamp(1rem, 3vw, 1.5rem);">
@@ -658,20 +610,6 @@ const StageTimer = () => {
                       currentBand.teardownTime
                     } minutos
                   </span>
-                  <div style="display: flex; gap: 0.5vw;">
-                    <div style="
-                      width: 1vw; height: 1vw; border-radius: 4px;
-                      background-color: ${currentBand.phase === 'setup' ? '#f6ad55' : '#4a5568'};
-                    " title="Montaje"></div>
-                    <div style="
-                      width: 1vw; height: 1vw; border-radius: 4px;
-                      background-color: ${currentBand.phase === 'show' ? '#68d391' : '#4a5568'};
-                    " title="Show"></div>
-                    <div style="
-                      width: 1vw; height: 1vw; border-radius: 4px;
-                      background-color: ${currentBand.phase === 'teardown' ? '#f6ad55' : '#4a5568'};
-                    " title="Desmontaje"></div>
-                  </div>
                 ` : ''}
               </div>
             </div>
@@ -758,15 +696,12 @@ const StageTimer = () => {
   // Switch to band view
   if (currentView === 'band') {
     return (
-      <>
-        <BandView
-          band={bands[currentBandIndex]}
-          currentBandIndex={currentBandIndex}
-          totalBands={bands.length}
-          onBackToAdmin={() => setCurrentView('admin')}
-        />
-        <NotificationSystem notifications={notifications} />
-      </>
+      <BandView
+        band={bands[currentBandIndex]}
+        currentBandIndex={currentBandIndex}
+        totalBands={bands.length}
+        onBackToAdmin={() => setCurrentView('admin')}
+      />
     );
   }
 
@@ -776,19 +711,19 @@ const StageTimer = () => {
         minHeight: '100vh',
         backgroundColor: '#1a1a1a',
         color: 'white',
-        padding: '20px'
+        padding: isMobile ? '10px' : '20px'
       }}>
         <div style={{
-          maxWidth: '1200px',
+          maxWidth: isMobile ? '100%' : '1200px',
           margin: '0 auto'
         }}>
           {/* Header */}
           <div style={{
             textAlign: 'center',
-            marginBottom: '30px'
+            marginBottom: isMobile ? '15px' : '30px'
           }}>
             <h1 style={{
-              fontSize: '2.5rem',
+              fontSize: isMobile ? '1.8rem' : '2.5rem',
               fontWeight: 'bold',
               margin: '0 0 10px 0',
               background: 'linear-gradient(45deg, #4299e1, #9f7aea)',
@@ -799,26 +734,23 @@ const StageTimer = () => {
             </h1>
             <p style={{
               color: '#a0aec0',
-              fontSize: '1.1rem',
+              fontSize: isMobile ? '0.9rem' : '1.1rem',
               margin: 0
             }}>
               Sistema de gestión de tiempo para presentaciones en vivo
             </p>
           </div>
 
-          {/* Main Content Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '20px',
-            marginBottom: '20px'
-          }}>
-            {/* Left Column */}
-            <div>
+          {/* Main Content - Mobile First Layout */}
+          {isMobile ? (
+            // Mobile Layout (Vertical)
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <TimerDisplay 
                 bands={bands} 
-                currentBandIndex={currentBandIndex} 
+                currentBandIndex={currentBandIndex}
+                isMobile={isMobile}
               />
+              
               <TimerControls
                 bands={bands}
                 currentBandIndex={currentBandIndex}
@@ -829,10 +761,7 @@ const StageTimer = () => {
                 onNextPhase={nextPhase}
                 onNextBand={nextBand}
               />
-            </div>
-
-            {/* Right Column */}
-            <div>
+              
               <WindowControls
                 soundEnabled={soundEnabled}
                 autoMode={autoMode}
@@ -845,23 +774,79 @@ const StageTimer = () => {
                 onSwitchToBandView={() => setCurrentView('band')}
                 onReloadBands={reloadBandsFromFirebase}
               />
+              
               <AddBandForm onBandAdded={handleBandAdded} />
+              
+              <BandsList
+                bands={bands}
+                currentBandIndex={currentBandIndex}
+                onSelectBand={selectBand}
+                onDeleteBand={deleteBand}
+                onUpdateBand={updateBand}
+                onReorderBands={reorderBands}
+                getTotalTime={getTotalTime}
+              />
             </div>
-          </div>
+          ) : (
+            // Desktop Layout (Grid)
+            <>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '20px',
+                marginBottom: '20px'
+              }}>
+                {/* Left Column */}
+                <div>
+                  <TimerDisplay 
+                    bands={bands} 
+                    currentBandIndex={currentBandIndex}
+                    isMobile={isMobile}
+                  />
+                  <TimerControls
+                    bands={bands}
+                    currentBandIndex={currentBandIndex}
+                    isRunning={isRunning}
+                    onStartTimer={startTimer}
+                    onPauseTimer={pauseTimer}
+                    onResetCurrentBand={resetCurrentBand}
+                    onNextPhase={nextPhase}
+                    onNextBand={nextBand}
+                  />
+                </div>
 
-          {/* Full Width Bands List */}
-          <BandsList
-            bands={bands}
-            currentBandIndex={currentBandIndex}
-            onSelectBand={selectBand}
-            onDeleteBand={deleteBand}
-            onUpdateBand={updateBand}
-            onReorderBands={reorderBands}
-            getTotalTime={getTotalTime}
-          />
+                {/* Right Column */}
+                <div>
+                  <WindowControls
+                    soundEnabled={soundEnabled}
+                    autoMode={autoMode}
+                    setSoundEnabled={setSoundEnabled}
+                    setAutoMode={setAutoMode}
+                    onOpenDisplayWindow={openDisplayWindow}
+                    onOpenBandWindow={openBandWindow}
+                    onExportSchedule={exportSchedule}
+                    onImportSchedule={importSchedule}
+                    onSwitchToBandView={() => setCurrentView('band')}
+                    onReloadBands={reloadBandsFromFirebase}
+                  />
+                  <AddBandForm onBandAdded={handleBandAdded} />
+                </div>
+              </div>
+
+              {/* Full Width Bands List */}
+              <BandsList
+                bands={bands}
+                currentBandIndex={currentBandIndex}
+                onSelectBand={selectBand}
+                onDeleteBand={deleteBand}
+                onUpdateBand={updateBand}
+                onReorderBands={reorderBands}
+                getTotalTime={getTotalTime}
+              />
+            </>
+          )}
         </div>
       </div>
-      <NotificationSystem notifications={notifications} />
     </DndProvider>
   );
 };
