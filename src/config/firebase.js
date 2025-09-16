@@ -1,59 +1,27 @@
-import { useState, useCallback } from 'react';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+// config/firebase.js
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAnalytics } from "firebase/analytics";
 
-export const useFirebase = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const saveToFirebase = useCallback(async (data) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Using a fixed document ID for simplicity - you might want to make this dynamic
-      const docRef = doc(db, 'stageTimer', 'currentSession');
-      await setDoc(docRef, data);
-      console.log('Data saved to Firebase successfully');
-      return { success: true };
-    } catch (err) {
-      console.error('Error saving to Firebase:', err);
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadFromFirebase = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const docRef = doc(db, 'stageTimer', 'currentSession');
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        console.log('Data loaded from Firebase successfully');
-        return { success: true, data };
-      } else {
-        console.log('No document found in Firebase');
-        return { success: false, error: 'No data found' };
-      }
-    } catch (err) {
-      console.error('Error loading from Firebase:', err);
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return {
-    saveToFirebase,
-    loadFromFirebase,
-    loading,
-    error
-  };
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBltVLRbb_YMtVjOMQmbHmCMWSaJBDgpzE",
+  authDomain: "stage-timer-f54f3.firebaseapp.com",
+  databaseURL: "https://stage-timer-f54f3-default-rtdb.firebaseio.com",
+  projectId: "stage-timer-f54f3",
+  storageBucket: "stage-timer-f54f3.firebasestorage.app",
+  messagingSenderId: "534417692167",
+  appId: "1:534417692167:web:e2713008bfa575493e7ca2",
+  measurementId: "G-YJE80XGJG1"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialize Firestore
+export const db = getFirestore(app);
+
+// Initialize Analytics (optional)
+export const analytics = getAnalytics(app);
+
+export default app;

@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import AdminView from './AdminView';
 import BandView from './BandView';
 import NotificationSystem from './NotificationSystem';
+import TimerDisplay from './TimerDisplay';
+import TimerControls from './TimerControls';
+import WindowControls from './WindowControls';
+import BandsList from './BandsList';
+import AddBandForm from './AddBandForm';
 import { formatTime, getPhaseLabel } from '../utils/helpers';
-import { DEFAULT_BANDS } from '../config/constants';
 import { useFirebase } from '../hooks/useFirebase';
 
 const StageTimer = () => {
-  const [bands, setBands] = useState(DEFAULT_BANDS);
+  const [bands, setBands] = useState([]);
   const [currentBandIndex, setCurrentBandIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [displayWindow, setDisplayWindow] = useState(null);
@@ -21,21 +24,29 @@ const StageTimer = () => {
 
   const { saveToFirebase, loadFromFirebase } = useFirebase();
 
-  // Save to Firebase when important data changes
-useEffect(() => {
-  const saveData = async () => {
-    await saveToFirebase({
-      bands,
-      currentBandIndex,
-      autoMode,
-      lastUpdated: new Date().toISOString()
-    });
-  };
-  
-  // Debounce save to avoid too frequent calls
-  const timeoutId = setTimeout(saveData, 1000);
-  return () => clearTimeout(timeoutId);
-}, [bands, currentBandIndex, autoMode, saveToFirebase]);
+  // Load bands from Firebase on component mount
+  useEffect(() => {
+    const loadBands = async () => {
+      try {
+        const result = await loadFromFirebase();
+        if (result.success && result.data?.bands) {
+          setBands(result.data.bands);
+          if (result.data.currentBandIndex !== undefined) {
+            setCurrentBandIndex(result.data.currentBandIndex);
+          }
+          if (result.data.autoMode !== undefined) {
+            setAutoMode(result.data.autoMode);
+          }
+          addNotification(`📥 ${result.data.bands.length} bandas cargadas desde Firebase`, 'success');
+        }
+      } catch (error) {
+        console.error('Error loading bands from Firebase:', error);
+        addNotification('❌ Error al cargar bandas desde Firebase', 'error');
+      }
+    };
+
+    loadBands();
+  }, [loadFromFirebase]);
 
   // Save to Firebase when important data changes
   useEffect(() => {
@@ -259,6 +270,35 @@ useEffect(() => {
     addNotification(`➕ Banda "${newBand.name}" agregada`, 'success');
   };
 
+  // Reload bands from Firebase
+  const reloadBandsFromFirebase = async () => {
+    try {
+      const result = await loadFromFirebase();
+      if (result.success && result.data?.bands) {
+        setBands(result.data.bands);
+        if (result.data.currentBandIndex !== undefined) {
+          setCurrentBandIndex(result.data.currentBandIndex);
+        }
+        if (result.data.autoMode !== undefined) {
+          setAutoMode(result.data.autoMode);
+        }
+        addNotification(`🔄 ${result.data.bands.length} bandas recargadas desde Firebase`, 'success');
+      } else {
+        addNotification('⚠️ No se encontraron bandas en Firebase', 'warning');
+      }
+    } catch (error) {
+      console.error('Error reloading bands from Firebase:', error);
+      addNotification('❌ Error al recargar bandas desde Firebase', 'error');
+    }
+  };
+
+  // Handle when a new band is added from the form
+  const handleBandAdded = async (newBand) => {
+    // Automatically reload bands from Firebase to sync with the new addition
+    await reloadBandsFromFirebase();
+    addNotification(`✅ Nueva banda "${newBand.name}" agregada y sincronizada`, 'success');
+  };
+
   const deleteBand = (id, name) => {
     setBands(bands.filter(band => band.id !== id));
     if (currentBandIndex >= bands.length - 1) {
@@ -295,7 +335,7 @@ useEffect(() => {
       total + band.setupTime + band.showTime + band.teardownTime, 0);
   };
 
-  // Display window management with responsive design
+  // Window management functions
   const openDisplayWindow = () => {
     const newDisplayWindow = window.open('', 'StageDisplay', 'width=1920,height=1080,fullscreen=yes');
     if (newDisplayWindow) {
@@ -347,7 +387,6 @@ useEffect(() => {
     }
   };
 
-  // Band view window management
   const openBandWindow = () => {
     const newBandWindow = window.open('', 'BandView', 'width=1200,height=800');
     if (newBandWindow) {
@@ -386,7 +425,49 @@ useEffect(() => {
     }
   };
 
-  // Update display window content with responsive design and fixed progress bar
+  // Export/Import functions
+  const exportSchedule = () => {
+    const data = {
+      bands,
+      currentBandIndex,
+      autoMode,
+      exportDate: new Date().toISOString(),
+      totalTime: getTotalTime()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stage-schedule-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addNotification('📊 Cronograma exportado', 'success');
+  };
+
+  const importSchedule = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.bands) {
+            setBands(data.bands);
+            setCurrentBandIndex(data.currentBandIndex || 0);
+            if (typeof data.autoMode === 'boolean') {
+              setAutoMode(data.autoMode);
+            }
+            addNotification('📂 Cronograma importado exitosamente', 'success');
+          }
+        } catch (error) {
+          addNotification('❌ Error al importar cronograma', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // Update display window content
   useEffect(() => {
     if (displayWindow && !displayWindow.closed) {
       const currentBand = bands[currentBandIndex];
@@ -674,48 +755,7 @@ useEffect(() => {
     };
   }, [displayWindow, bandWindow]);
 
-  // Export/Import functions
-  const exportSchedule = () => {
-    const data = {
-      bands,
-      currentBandIndex,
-      autoMode,
-      exportDate: new Date().toISOString(),
-      totalTime: getTotalTime()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stage-schedule-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    addNotification('📊 Cronograma exportado', 'success');
-  };
-
-  const importSchedule = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (data.bands) {
-            setBands(data.bands);
-            setCurrentBandIndex(data.currentBandIndex || 0);
-            if (typeof data.autoMode === 'boolean') {
-              setAutoMode(data.autoMode);
-            }
-            addNotification('📂 Cronograma importado exitosamente', 'success');
-          }
-        } catch (error) {
-          addNotification('❌ Error al importar cronograma', 'error');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
+  // Switch to band view
   if (currentView === 'band') {
     return (
       <>
@@ -732,31 +772,95 @@ useEffect(() => {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <AdminView
-        bands={bands}
-        currentBandIndex={currentBandIndex}
-        isRunning={isRunning}
-        soundEnabled={soundEnabled}
-        autoMode={autoMode}
-        setSoundEnabled={setSoundEnabled}
-        setAutoMode={setAutoMode}
-        onStartTimer={startTimer}
-        onPauseTimer={pauseTimer}
-        onResetCurrentBand={resetCurrentBand}
-        onNextPhase={nextPhase}
-        onNextBand={nextBand}
-        onSelectBand={selectBand}
-        onAddBand={addBand}
-        onDeleteBand={deleteBand}
-        onUpdateBand={updateBand}
-        onReorderBands={reorderBands}
-        onOpenDisplayWindow={openDisplayWindow}
-        onOpenBandWindow={openBandWindow}
-        onExportSchedule={exportSchedule}
-        onImportSchedule={importSchedule}
-        onSwitchToBandView={() => setCurrentView('band')}
-        getTotalTime={getTotalTime}
-      />
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#1a1a1a',
+        color: 'white',
+        padding: '20px'
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
+          {/* Header */}
+          <div style={{
+            textAlign: 'center',
+            marginBottom: '30px'
+          }}>
+            <h1 style={{
+              fontSize: '2.5rem',
+              fontWeight: 'bold',
+              margin: '0 0 10px 0',
+              background: 'linear-gradient(45deg, #4299e1, #9f7aea)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              🎵 Stage Timer
+            </h1>
+            <p style={{
+              color: '#a0aec0',
+              fontSize: '1.1rem',
+              margin: 0
+            }}>
+              Sistema de gestión de tiempo para presentaciones en vivo
+            </p>
+          </div>
+
+          {/* Main Content Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '20px',
+            marginBottom: '20px'
+          }}>
+            {/* Left Column */}
+            <div>
+              <TimerDisplay 
+                bands={bands} 
+                currentBandIndex={currentBandIndex} 
+              />
+              <TimerControls
+                bands={bands}
+                currentBandIndex={currentBandIndex}
+                isRunning={isRunning}
+                onStartTimer={startTimer}
+                onPauseTimer={pauseTimer}
+                onResetCurrentBand={resetCurrentBand}
+                onNextPhase={nextPhase}
+                onNextBand={nextBand}
+              />
+            </div>
+
+            {/* Right Column */}
+            <div>
+              <WindowControls
+                soundEnabled={soundEnabled}
+                autoMode={autoMode}
+                setSoundEnabled={setSoundEnabled}
+                setAutoMode={setAutoMode}
+                onOpenDisplayWindow={openDisplayWindow}
+                onOpenBandWindow={openBandWindow}
+                onExportSchedule={exportSchedule}
+                onImportSchedule={importSchedule}
+                onSwitchToBandView={() => setCurrentView('band')}
+                onReloadBands={reloadBandsFromFirebase}
+              />
+              <AddBandForm onBandAdded={handleBandAdded} />
+            </div>
+          </div>
+
+          {/* Full Width Bands List */}
+          <BandsList
+            bands={bands}
+            currentBandIndex={currentBandIndex}
+            onSelectBand={selectBand}
+            onDeleteBand={deleteBand}
+            onUpdateBand={updateBand}
+            onReorderBands={reorderBands}
+            getTotalTime={getTotalTime}
+          />
+        </div>
+      </div>
       <NotificationSystem notifications={notifications} />
     </DndProvider>
   );
