@@ -10,7 +10,8 @@ const BandItem = ({
   onSelect, 
   onEdit, 
   onDelete, 
-  onReorder 
+  onReorder,
+  disabled = false
 }) => {
   const [{ isDragging }, drag] = useDrag({
     type: 'band',
@@ -18,16 +19,18 @@ const BandItem = ({
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
+    canDrag: !disabled
   });
 
   const [, drop] = useDrop({
     accept: 'band',
     hover: (draggedItem) => {
-      if (draggedItem.index !== index) {
+      if (!disabled && draggedItem.index !== index) {
         onReorder(draggedItem.index, index);
         draggedItem.index = index;
       }
     },
+    canDrop: !disabled
   });
 
   const getStatusColor = () => {
@@ -49,26 +52,26 @@ const BandItem = ({
 
   return (
     <div
-      ref={(node) => drag(drop(node))}
-      onClick={() => onSelect(index)}
+      ref={(node) => !disabled && drag(drop(node))}
+      onClick={() => !disabled && onSelect(index)}
       style={{
         backgroundColor: isSelected ? '#2d3748' : '#4a5568',
         border: isSelected ? '2px solid #4299e1' : '2px solid transparent',
         borderRadius: '8px',
         padding: '16px',
         marginBottom: '12px',
-        cursor: 'pointer',
-        opacity: isDragging ? 0.5 : 1,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: isDragging ? 0.5 : (disabled ? 0.7 : 1),
         transition: 'all 0.2s ease',
         position: 'relative'
       }}
       onMouseOver={(e) => {
-        if (!isSelected) {
+        if (!isSelected && !disabled) {
           e.currentTarget.style.backgroundColor = '#2d3748';
         }
       }}
       onMouseOut={(e) => {
-        if (!isSelected) {
+        if (!isSelected && !disabled) {
           e.currentTarget.style.backgroundColor = '#4a5568';
         }
       }}
@@ -103,17 +106,19 @@ const BandItem = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onEdit(band);
+            if (!disabled) onEdit(band);
           }}
+          disabled={disabled}
           style={{
             padding: '4px',
-            backgroundColor: '#4299e1',
+            backgroundColor: disabled ? '#4a5568' : '#4299e1',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            opacity: disabled ? 0.5 : 1
           }}
         >
           <Edit2 size={12} />
@@ -121,17 +126,19 @@ const BandItem = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDelete(band.id, band.name);
+            if (!disabled) onDelete(band.id, band.name);
           }}
+          disabled={disabled}
           style={{
             padding: '4px',
-            backgroundColor: '#f56565',
+            backgroundColor: disabled ? '#4a5568' : '#f56565',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            opacity: disabled ? 0.5 : 1
           }}
         >
           <Trash2 size={12} />
@@ -220,15 +227,17 @@ const BandItem = ({
       </div>
 
       {/* Drag Indicator */}
-      <div style={{
-        position: 'absolute',
-        right: '8px',
-        bottom: '8px',
-        color: '#a0aec0',
-        fontSize: '12px'
-      }}>
-        ⋮⋮
-      </div>
+      {!disabled && (
+        <div style={{
+          position: 'absolute',
+          right: '8px',
+          bottom: '8px',
+          color: '#a0aec0',
+          fontSize: '12px'
+        }}>
+          ⋮⋮
+        </div>
+      )}
     </div>
   );
 };
@@ -240,17 +249,22 @@ const BandsList = ({
   onDeleteBand,
   onUpdateBand,
   onReorderBands,
-  getTotalTime
+  getTotalTime,
+  disabled = false
 }) => {
   const [editingBand, setEditingBand] = React.useState(null);
 
   const handleEdit = (band) => {
-    setEditingBand(band);
+    if (!disabled) {
+      setEditingBand(band);
+    }
   };
 
   const handleSaveEdit = (updatedBand) => {
-    onUpdateBand(updatedBand);
-    setEditingBand(null);
+    if (!disabled) {
+      onUpdateBand(updatedBand);
+      setEditingBand(null);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -285,7 +299,8 @@ const BandsList = ({
     <div style={{
       backgroundColor: '#2d3748',
       padding: '20px',
-      borderRadius: '8px'
+      borderRadius: '8px',
+      opacity: disabled ? 0.8 : 1
     }}>
       <div style={{
         display: 'flex',
@@ -300,6 +315,16 @@ const BandsList = ({
           margin: 0
         }}>
           Cronograma de Bandas
+          {disabled && (
+            <span style={{
+              fontSize: '12px',
+              color: '#f6ad55',
+              marginLeft: '8px',
+              fontWeight: 'normal'
+            }}>
+              (Solo vista)
+            </span>
+          )}
         </h3>
         <div style={{
           color: '#a0aec0',
@@ -308,6 +333,21 @@ const BandsList = ({
           {bands.length} bandas • {getTotalTime()} min total
         </div>
       </div>
+
+      {disabled && (
+        <div style={{
+          padding: '8px 12px',
+          backgroundColor: '#f6ad55',
+          color: '#1a1a1a',
+          borderRadius: '6px',
+          fontSize: '12px',
+          textAlign: 'center',
+          fontWeight: '600',
+          marginBottom: '16px'
+        }}>
+          Solo el dispositivo principal puede editar la lista de bandas
+        </div>
+      )}
 
       <div style={{
         maxHeight: '500px',
@@ -324,12 +364,13 @@ const BandsList = ({
             onEdit={handleEdit}
             onDelete={onDeleteBand}
             onReorder={onReorderBands}
+            disabled={disabled}
           />
         ))}
       </div>
 
       {/* Edit Modal */}
-      {editingBand && (
+      {editingBand && !disabled && (
         <EditBandModal
           band={editingBand}
           onSave={handleSaveEdit}
@@ -344,12 +385,20 @@ const BandsList = ({
         color: '#a0aec0',
         lineHeight: 1.4
       }}>
-        <p style={{ margin: '0 0 4px 0' }}>
-          • Arrastra las bandas para reordenar
-        </p>
-        <p style={{ margin: '0' }}>
-          • Haz clic en una banda para seleccionarla
-        </p>
+        {!disabled ? (
+          <>
+            <p style={{ margin: '0 0 4px 0' }}>
+              • Arrastra las bandas para reordenar
+            </p>
+            <p style={{ margin: '0' }}>
+              • Haz clic en una banda para seleccionarla
+            </p>
+          </>
+        ) : (
+          <p style={{ margin: '0' }}>
+            • Los cambios se sincronizan automáticamente desde el dispositivo principal
+          </p>
+        )}
       </div>
     </div>
   );

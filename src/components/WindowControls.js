@@ -11,9 +11,10 @@ const WindowControls = ({
   onImportSchedule,
   onSwitchToBandView,
   onReloadBands,
-  hideDisplayButton = false // Nueva prop para ocultar el botón de display
+  hideDisplayButton = false, // Nueva prop para ocultar el botón de display
+  disabled = false // Nueva prop para deshabilitar controles
 }) => {
-  return (
+return (
     <div style={{
       backgroundColor: '#2d3748',
       padding: '20px',
@@ -285,5 +286,4 @@ const WindowControls = ({
     </div>
   );
 };
-
 export default WindowControls;

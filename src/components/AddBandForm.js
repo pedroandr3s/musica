@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useFirebase } from '../hooks/useFirebase';
 
-const AddBandForm = ({ onBandAdded }) => {
+const AddBandForm = ({ onBandAdded, disabled = false }) => {
   const [newBandName, setNewBandName] = useState('');
   const [newBandSetup, setNewBandSetup] = useState('');
   const [newBandShow, setNewBandShow] = useState('');
@@ -61,6 +61,8 @@ const AddBandForm = ({ onBandAdded }) => {
 
   // Manejar envío del formulario - GUARDA EN FIREBASE Y NOTIFICA AL PADRE
   const handleAddBand = async () => {
+    if (disabled) return;
+    
     setMessage({ type: '', text: '' });
     setIsSubmitting(true);
 
@@ -159,13 +161,15 @@ const AddBandForm = ({ onBandAdded }) => {
 
   // Manejar Enter en los inputs
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !isSubmitting) {
+    if (e.key === 'Enter' && !isSubmitting && !disabled) {
       handleAddBand();
     }
   };
 
   // Limpiar mensaje cuando el usuario empiece a escribir
   const handleInputChange = (setter) => (e) => {
+    if (disabled) return;
+    
     if (message.text) {
       setMessage({ type: '', text: '' });
     }
@@ -189,7 +193,8 @@ const AddBandForm = ({ onBandAdded }) => {
       backgroundColor: '#2d3748',
       padding: '20px',
       borderRadius: '8px',
-      marginBottom: '20px'
+      marginBottom: '20px',
+      opacity: disabled ? 0.6 : 1
     }}>
       <h2 style={{ 
         fontSize: '18px', 
@@ -199,6 +204,16 @@ const AddBandForm = ({ onBandAdded }) => {
         margin: '0 0 16px 0'
       }}>
         Agregar Nueva Banda
+        {disabled && (
+          <span style={{
+            fontSize: '12px',
+            color: '#f6ad55',
+            marginLeft: '8px',
+            fontWeight: 'normal'
+          }}>
+            (Solo dispositivo principal)
+          </span>
+        )}
       </h2>
 
       {/* Mensaje de estado */}
@@ -241,6 +256,21 @@ const AddBandForm = ({ onBandAdded }) => {
         </div>
       )}
 
+      {disabled && (
+        <div style={{
+          padding: '12px',
+          marginBottom: '16px',
+          backgroundColor: '#f6ad55',
+          color: '#1a1a1a',
+          borderRadius: '6px',
+          fontSize: '14px',
+          textAlign: 'center',
+          fontWeight: '600'
+        }}>
+          Solo el dispositivo principal puede agregar bandas
+        </div>
+      )}
+
       {/* Formulario */}
       <div style={{ 
         display: 'grid',
@@ -258,11 +288,11 @@ const AddBandForm = ({ onBandAdded }) => {
             padding: '12px',
             borderRadius: '6px',
             border: '1px solid #4a5568',
-            backgroundColor: '#4a5568',
-            color: 'white',
+            backgroundColor: disabled ? '#2a2a2a' : '#4a5568',
+            color: disabled ? '#666' : 'white',
             fontSize: '14px'
           }}
-          disabled={isSubmitting}
+          disabled={disabled || isSubmitting}
           maxLength={50}
         />
         <input
@@ -275,13 +305,13 @@ const AddBandForm = ({ onBandAdded }) => {
             padding: '12px',
             borderRadius: '6px',
             border: '1px solid #4a5568',
-            backgroundColor: '#4a5568',
-            color: 'white',
+            backgroundColor: disabled ? '#2a2a2a' : '#4a5568',
+            color: disabled ? '#666' : 'white',
             fontSize: '14px'
           }}
           min="1"
           max="120"
-          disabled={isSubmitting}
+          disabled={disabled || isSubmitting}
         />
         <input
           type="number"
@@ -293,13 +323,13 @@ const AddBandForm = ({ onBandAdded }) => {
             padding: '12px',
             borderRadius: '6px',
             border: '1px solid #4a5568',
-            backgroundColor: '#4a5568',
-            color: 'white',
+            backgroundColor: disabled ? '#2a2a2a' : '#4a5568',
+            color: disabled ? '#666' : 'white',
             fontSize: '14px'
           }}
           min="1"
           max="180"
-          disabled={isSubmitting}
+          disabled={disabled || isSubmitting}
         />
         <input
           type="number"
@@ -311,18 +341,18 @@ const AddBandForm = ({ onBandAdded }) => {
             padding: '12px',
             borderRadius: '6px',
             border: '1px solid #4a5568',
-            backgroundColor: '#4a5568',
-            color: 'white',
+            backgroundColor: disabled ? '#2a2a2a' : '#4a5568',
+            color: disabled ? '#666' : 'white',
             fontSize: '14px'
           }}
           min="1"
           max="60"
-          disabled={isSubmitting}
+          disabled={disabled || isSubmitting}
         />
       </div>
 
       {/* Información adicional */}
-      {totalTime > 0 && (
+      {totalTime > 0 && !disabled && (
         <div style={{
           backgroundColor: '#4a5568',
           padding: '8px 12px',
@@ -343,32 +373,32 @@ const AddBandForm = ({ onBandAdded }) => {
       {/* Botón de envío */}
       <button
         onClick={handleAddBand}
-        disabled={!isFormValid || isSubmitting}
+        disabled={!isFormValid || isSubmitting || disabled}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '8px',
           padding: '12px 20px',
-          backgroundColor: (!isFormValid || isSubmitting) ? '#4a5568' : '#48bb78',
+          backgroundColor: (!isFormValid || isSubmitting || disabled) ? '#4a5568' : '#48bb78',
           color: 'white',
           border: 'none',
           borderRadius: '6px',
-          cursor: (!isFormValid || isSubmitting) ? 'not-allowed' : 'pointer',
+          cursor: (!isFormValid || isSubmitting || disabled) ? 'not-allowed' : 'pointer',
           fontSize: '14px',
           fontWeight: 'bold',
           width: '100%',
           transition: 'all 0.2s',
-          opacity: (!isFormValid || isSubmitting) ? 0.6 : 1
+          opacity: (!isFormValid || isSubmitting || disabled) ? 0.6 : 1
         }}
         onMouseOver={(e) => {
-          if (isFormValid && !isSubmitting) {
+          if (isFormValid && !isSubmitting && !disabled) {
             e.target.style.backgroundColor = '#38a169';
             e.target.style.transform = 'translateY(-1px)';
           }
         }}
         onMouseOut={(e) => {
-          if (isFormValid && !isSubmitting) {
+          if (isFormValid && !isSubmitting && !disabled) {
             e.target.style.backgroundColor = '#48bb78';
             e.target.style.transform = 'translateY(0)';
           }
@@ -388,22 +418,24 @@ const AddBandForm = ({ onBandAdded }) => {
       </button>
 
       {/* Información de ayuda */}
-      <div style={{
-        marginTop: '12px',
-        fontSize: '12px',
-        color: '#a0aec0',
-        lineHeight: 1.4
-      }}>
-        <p style={{ margin: '0 0 4px 0' }}>
-          • El nombre debe ser único y tener al menos 2 caracteres
-        </p>
-        <p style={{ margin: '0 0 4px 0' }}>
-          • Tiempos: Montaje (1-120min), Show (1-180min), Desmontaje (1-60min)
-        </p>
-        <p style={{ margin: '0' }}>
-          • Presiona Enter para agregar rápidamente
-        </p>
-      </div>
+      {!disabled && (
+        <div style={{
+          marginTop: '12px',
+          fontSize: '12px',
+          color: '#a0aec0',
+          lineHeight: 1.4
+        }}>
+          <p style={{ margin: '0 0 4px 0' }}>
+            • El nombre debe ser único y tener al menos 2 caracteres
+          </p>
+          <p style={{ margin: '0 0 4px 0' }}>
+            • Tiempos: Montaje (1-120min), Show (1-180min), Desmontaje (1-60min)
+          </p>
+          <p style={{ margin: '0' }}>
+            • Presiona Enter para agregar rápidamente
+          </p>
+        </div>
+      )}
 
       <style>
         {`

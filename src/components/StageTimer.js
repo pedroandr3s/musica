@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import BandView from './BandView';
@@ -11,6 +11,7 @@ import DisplayWindowButton from './DisplayWindowButton';
 import { updateDisplayWindow } from './DisplayWindowButton';
 import { formatTime, getPhaseLabel } from '../utils/helpers';
 import { useFirebase } from '../hooks/useFirebase';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const StageTimer = () => {
   const [bands, setBands] = useState([]);
@@ -22,8 +23,31 @@ const StageTimer = () => {
   const [autoMode, setAutoMode] = useState(true);
   const [currentView, setCurrentView] = useState('admin');
   const [isMobile, setIsMobile] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('disconnected');
+  
+  // Referencias para evitar loops infinitos
+  const lastSyncRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const isLocalUpdateRef = useRef(false);
 
   const { saveToFirebase, loadFromFirebase } = useFirebase();
+  const { 
+    isConnected, 
+    isMaster, 
+    syncTimerState, 
+    sendControlCommand, 
+    becomeMaster, 
+    initializeSession 
+  } = useRealtimeSync('stage-timer-session');
+
+  // Actualizar estado de sincronización
+  useEffect(() => {
+    if (isConnected) {
+      setSyncStatus(isMaster ? 'master' : 'connected');
+    } else {
+      setSyncStatus('disconnected');
+    }
+  }, [isConnected, isMaster]);
 
   // Detect mobile screen size
   useEffect(() => {
@@ -49,6 +73,15 @@ const StageTimer = () => {
           if (result.data.autoMode !== undefined) {
             setAutoMode(result.data.autoMode);
           }
+          
+          // Inicializar sesión de sincronización en tiempo real
+          await initializeSession({
+            bands: result.data.bands,
+            currentBandIndex: result.data.currentBandIndex || 0,
+            autoMode: result.data.autoMode || true,
+            soundEnabled: true,
+            isRunning: false
+          });
         } else {
           console.log('No bands found in Firebase - starting fresh');
         }
@@ -58,28 +91,96 @@ const StageTimer = () => {
     };
 
     loadBands();
-  }, [loadFromFirebase]);
+  }, [loadFromFirebase, initializeSession]);
 
-  // Save to Firebase when important data changes
+  // Listener para cambios en tiempo real
   useEffect(() => {
-    if (bands.length === 0) return;
-    
-    const saveData = async () => {
-      try {
-        await saveToFirebase({
-          bands,
-          currentBandIndex,
-          autoMode,
-          lastUpdated: new Date().toISOString()
-        });
-      } catch (error) {
-        console.error('Error saving to Firebase:', error);
+    const handleTimerStateUpdate = (event) => {
+      const data = event.detail;
+      
+      // Evitar procesar nuestras propias actualizaciones
+      if (isLocalUpdateRef.current || !data || !data.bands) {
+        isLocalUpdateRef.current = false;
+        return;
+      }
+
+      // Actualizar estado desde la sincronización
+      if (data.bands && Array.isArray(data.bands)) {
+        setBands(data.bands);
+      }
+      
+      if (typeof data.currentBandIndex === 'number') {
+        setCurrentBandIndex(data.currentBandIndex);
+      }
+      
+      if (typeof data.autoMode === 'boolean') {
+        setAutoMode(data.autoMode);
+      }
+      
+      if (typeof data.soundEnabled === 'boolean') {
+        setSoundEnabled(data.soundEnabled);
+      }
+
+      // Manejar comandos de control
+      if (data.controlCommand) {
+        const { command, timestamp } = data.controlCommand;
+        
+        // Evitar procesar comandos antiguos
+        if (lastSyncRef.current && timestamp <= lastSyncRef.current) {
+          return;
+        }
+        
+        lastSyncRef.current = timestamp;
+        
+        switch (command) {
+          case 'start':
+            setIsRunning(true);
+            break;
+          case 'pause':
+            setIsRunning(false);
+            break;
+          case 'reset':
+            // Resetear banda actual será manejado por el master
+            break;
+          case 'nextPhase':
+            // Avanzar fase será manejado por el master
+            break;
+          case 'nextBand':
+            // Avanzar banda será manejado por el master
+            break;
+          default:
+            break;
+        }
+      }
+
+      // Sincronizar estado de ejecución
+      if (typeof data.isRunning === 'boolean') {
+        setIsRunning(data.isRunning);
       }
     };
+
+    window.addEventListener('timerStateUpdate', handleTimerStateUpdate);
     
-    const timeoutId = setTimeout(saveData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [bands, currentBandIndex, autoMode, saveToFirebase]);
+    return () => {
+      window.removeEventListener('timerStateUpdate', handleTimerStateUpdate);
+    };
+  }, []);
+
+  // Sincronizar estado cuando cambie (solo si somos master)
+  useEffect(() => {
+    if (isMaster && bands.length > 0) {
+      const syncData = {
+        bands,
+        currentBandIndex,
+        isRunning,
+        autoMode,
+        soundEnabled
+      };
+      
+      isLocalUpdateRef.current = true;
+      syncTimerState(syncData);
+    }
+  }, [bands, currentBandIndex, isRunning, autoMode, soundEnabled, isMaster, syncTimerState]);
 
   // Enhanced audio context for notifications
   const playSound = useCallback((frequency = 800, duration = 200) => {
@@ -104,11 +205,14 @@ const StageTimer = () => {
     }
   }, [soundEnabled]);
 
-  // Enhanced timer with auto/manual mode
+  // Enhanced timer with auto/manual mode - SOLO EJECUTAR SI SOMOS MASTER
   useEffect(() => {
-    let interval = null;
-    if (isRunning && currentBandIndex < bands.length) {
-      interval = setInterval(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    if (isRunning && currentBandIndex < bands.length && isMaster) {
+      timerIntervalRef.current = setInterval(() => {
         setBands(prevBands => {
           const newBands = [...prevBands];
           const currentBand = newBands[currentBandIndex];
@@ -177,22 +281,29 @@ const StageTimer = () => {
         });
       }, 1000);
     }
-    return () => clearInterval(interval);
-  }, [isRunning, currentBandIndex, bands.length, playSound, autoMode]);
+    
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [isRunning, currentBandIndex, bands.length, playSound, autoMode, isMaster]);
 
-  // Timer control functions
-  const startTimer = () => {
+  // Timer control functions - ENVIAR COMANDOS A TODOS LOS DISPOSITIVOS
+  const startTimer = async () => {
     if (currentBandIndex < bands.length) {
       setIsRunning(true);
+      await sendControlCommand('start');
     }
   };
 
-  const pauseTimer = () => {
+  const pauseTimer = async () => {
     setIsRunning(false);
+    await sendControlCommand('pause');
   };
 
-  const resetCurrentBand = () => {
-    if (currentBandIndex < bands.length) {
+  const resetCurrentBand = async () => {
+    if (currentBandIndex < bands.length && isMaster) {
       setBands(prevBands => {
         const newBands = [...prevBands];
         const currentBand = newBands[currentBandIndex];
@@ -202,11 +313,12 @@ const StageTimer = () => {
         return newBands;
       });
       setIsRunning(false);
+      await sendControlCommand('reset');
     }
   };
 
-  const nextPhase = () => {
-    if (currentBandIndex < bands.length) {
+  const nextPhase = async () => {
+    if (currentBandIndex < bands.length && isMaster) {
       setBands(prevBands => {
         const newBands = [...prevBands];
         const currentBand = newBands[currentBandIndex];
@@ -224,23 +336,29 @@ const StageTimer = () => {
         return newBands;
       });
       setIsRunning(false);
+      await sendControlCommand('nextPhase');
     }
   };
 
-  const nextBand = () => {
-    if (currentBandIndex < bands.length - 1) {
+  const nextBand = async () => {
+    if (currentBandIndex < bands.length - 1 && isMaster) {
       setCurrentBandIndex(currentBandIndex + 1);
       setIsRunning(false);
+      await sendControlCommand('nextBand');
     }
   };
 
   const selectBand = (index) => {
-    setCurrentBandIndex(index);
-    setIsRunning(false);
+    if (isMaster) {
+      setCurrentBandIndex(index);
+      setIsRunning(false);
+    }
   };
 
-  // Reorder bands function for drag and drop
+  // Resto de funciones (sin cambios significativos)
   const reorderBands = useCallback((dragIndex, hoverIndex) => {
+    if (!isMaster) return;
+    
     setBands(prevBands => {
       const newBands = [...prevBands];
       const draggedBand = newBands[dragIndex];
@@ -248,10 +366,32 @@ const StageTimer = () => {
       newBands.splice(hoverIndex, 0, draggedBand);
       return newBands;
     });
-  }, []);
+  }, [isMaster]);
 
-  // Reload bands from Firebase
+  // Save to Firebase when important data changes (solo master)
+  useEffect(() => {
+    if (bands.length === 0 || !isMaster) return;
+    
+    const saveData = async () => {
+      try {
+        await saveToFirebase({
+          bands,
+          currentBandIndex,
+          autoMode,
+          lastUpdated: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error saving to Firebase:', error);
+      }
+    };
+    
+    const timeoutId = setTimeout(saveData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [bands, currentBandIndex, autoMode, saveToFirebase, isMaster]);
+
   const reloadBandsFromFirebase = async () => {
+    if (!isMaster) return;
+    
     try {
       const result = await loadFromFirebase();
       if (result.success && result.data?.bands) {
@@ -268,12 +408,15 @@ const StageTimer = () => {
     }
   };
 
-  // Handle when a new band is added from the form
   const handleBandAdded = async (newBand) => {
-    await reloadBandsFromFirebase();
+    if (isMaster) {
+      await reloadBandsFromFirebase();
+    }
   };
 
   const deleteBand = (id, name) => {
+    if (!isMaster) return;
+    
     setBands(bands.filter(band => band.id !== id));
     if (currentBandIndex >= bands.length - 1) {
       setCurrentBandIndex(Math.max(0, bands.length - 2));
@@ -281,6 +424,8 @@ const StageTimer = () => {
   };
 
   const updateBand = (updatedBand) => {
+    if (!isMaster) return;
+    
     setBands(bands.map(band => {
       if (band.id === updatedBand.id) {
         const newBand = { ...band, ...updatedBand };
@@ -301,13 +446,11 @@ const StageTimer = () => {
     }));
   };
 
-  // Utility functions
   const getTotalTime = () => {
     return bands.reduce((total, band) => 
       total + band.setupTime + band.showTime + band.teardownTime, 0);
   };
 
-  // Window management functions - SIMPLIFICADAS
   const handleDisplayWindowCreated = (newDisplayWindow) => {
     setDisplayWindow(newDisplayWindow);
   };
@@ -346,7 +489,6 @@ const StageTimer = () => {
     }
   };
 
-  // Export/Import functions
   const exportSchedule = () => {
     const data = {
       bands,
@@ -365,6 +507,8 @@ const StageTimer = () => {
   };
 
   const importSchedule = (event) => {
+    if (!isMaster) return;
+    
     const file = event.target.files[0];
     if (file) {
       const reader = new FileReader();
@@ -386,7 +530,7 @@ const StageTimer = () => {
     }
   };
 
-  // Update display window content usando la función exportada
+  // Update display window content
   useEffect(() => {
     updateDisplayWindow(displayWindow, bands, currentBandIndex, isRunning, soundEnabled);
   }, [bands, currentBandIndex, isRunning, soundEnabled, displayWindow]);
@@ -457,6 +601,9 @@ const StageTimer = () => {
       if (bandWindow && !bandWindow.closed) {
         bandWindow.close();
       }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
     };
   }, [displayWindow, bandWindow]);
 
@@ -484,7 +631,7 @@ const StageTimer = () => {
           maxWidth: isMobile ? '100%' : '1200px',
           margin: '0 auto'
         }}>
-          {/* Header */}
+          {/* Header with sync status */}
           <div style={{
             textAlign: 'center',
             marginBottom: isMobile ? '15px' : '30px'
@@ -502,10 +649,39 @@ const StageTimer = () => {
             <p style={{
               color: '#a0aec0',
               fontSize: isMobile ? '0.9rem' : '1.1rem',
-              margin: 0
+              margin: '0 0 10px 0'
             }}>
               Sistema de gestión de tiempo para presentaciones en vivo
             </p>
+            
+            {/* Indicador de estado de sincronización */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              fontSize: '0.9rem',
+              backgroundColor: syncStatus === 'master' ? '#38a169' : 
+                              syncStatus === 'connected' ? '#3182ce' : '#e53e3e',
+              color: 'white'
+            }}>
+              <span>{syncStatus === 'master' ? '👑' : 
+                     syncStatus === 'connected' ? '🔗' : '❌'}</span>
+              {syncStatus === 'master' ? 'Dispositivo Principal' :
+               syncStatus === 'connected' ? 'Conectado (Solo Vista)' :
+               'Desconectado'}
+            </div>
+            
+            {!isMaster && syncStatus === 'connected' && (
+              <div style={{
+                marginTop: '8px',
+                fontSize: '0.8rem',
+                color: '#f6ad55'
+              }}>
+                Los controles están deshabilitados. Solo el dispositivo principal puede controlar el timer.
+              </div>
+            )}
           </div>
 
           {/* Main Content - Mobile First Layout */}
@@ -527,9 +703,9 @@ const StageTimer = () => {
                 onResetCurrentBand={resetCurrentBand}
                 onNextPhase={nextPhase}
                 onNextBand={nextBand}
+                disabled={!isMaster}
               />
               
-              {/* Aquí se usa el nuevo componente DisplayWindowButton */}
               <div style={{ marginBottom: '15px' }}>
                 <DisplayWindowButton
                   bands={bands}
@@ -550,10 +726,11 @@ const StageTimer = () => {
                 onImportSchedule={importSchedule}
                 onSwitchToBandView={() => setCurrentView('band')}
                 onReloadBands={reloadBandsFromFirebase}
-                hideDisplayButton={true} // Ocultar el botón original en WindowControls
+                hideDisplayButton={true}
+                disabled={!isMaster}
               />
               
-              <AddBandForm onBandAdded={handleBandAdded} />
+              <AddBandForm onBandAdded={handleBandAdded} disabled={!isMaster} />
               
               <BandsList
                 bands={bands}
@@ -563,6 +740,7 @@ const StageTimer = () => {
                 onUpdateBand={updateBand}
                 onReorderBands={reorderBands}
                 getTotalTime={getTotalTime}
+                disabled={!isMaster}
               />
             </div>
           ) : (
@@ -590,12 +768,12 @@ const StageTimer = () => {
                     onResetCurrentBand={resetCurrentBand}
                     onNextPhase={nextPhase}
                     onNextBand={nextBand}
+                    disabled={!isMaster}
                   />
                 </div>
 
                 {/* Right Column */}
                 <div>
-                  {/* Aquí se usa el nuevo componente DisplayWindowButton */}
                   <div style={{ marginBottom: '20px' }}>
                     <DisplayWindowButton
                       bands={bands}
@@ -616,9 +794,10 @@ const StageTimer = () => {
                     onImportSchedule={importSchedule}
                     onSwitchToBandView={() => setCurrentView('band')}
                     onReloadBands={reloadBandsFromFirebase}
-                    hideDisplayButton={true} // Ocultar el botón original en WindowControls
+                    hideDisplayButton={true}
+                    disabled={!isMaster}
                   />
-                  <AddBandForm onBandAdded={handleBandAdded} />
+                  <AddBandForm onBandAdded={handleBandAdded} disabled={!isMaster} />
                 </div>
               </div>
 
@@ -631,8 +810,28 @@ const StageTimer = () => {
                 onUpdateBand={updateBand}
                 onReorderBands={reorderBands}
                 getTotalTime={getTotalTime}
+                disabled={!isMaster}
               />
             </>
+          )}
+
+          {/* Botón para convertirse en master si no hay conexión */}
+          {syncStatus === 'disconnected' && (
+            <div style={{
+              position: 'fixed',
+              bottom: '20px',
+              right: '20px',
+              padding: '12px 20px',
+              backgroundColor: '#e53e3e',
+              color: 'white',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: '600'
+            }}
+            onClick={becomeMaster}>
+              Convertirse en Dispositivo Principal
+            </div>
           )}
         </div>
       </div>

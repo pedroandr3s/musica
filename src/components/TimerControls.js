@@ -10,7 +10,8 @@ const TimerControls = ({
   onPauseTimer,
   onResetCurrentBand,
   onNextPhase,
-  onNextBand
+  onNextBand,
+  disabled = false
 }) => {
   const currentBand = bands[currentBandIndex];
   const hasNextBand = currentBandIndex < bands.length - 1;
@@ -34,7 +35,8 @@ const TimerControls = ({
       backgroundColor: '#2d3748',
       padding: '20px',
       borderRadius: '8px',
-      marginBottom: '20px'
+      marginBottom: '20px',
+      opacity: disabled ? 0.6 : 1
     }}>
       <div style={{
         display: 'flex',
@@ -50,6 +52,15 @@ const TimerControls = ({
             margin: 0
           }}>
             {currentBand.name}
+            {disabled && (
+              <span style={{
+                fontSize: '12px',
+                color: '#f6ad55',
+                marginLeft: '8px'
+              }}>
+                (Solo dispositivo principal)
+              </span>
+            )}
           </h3>
           <p style={{
             color: '#a0aec0',
@@ -75,26 +86,32 @@ const TimerControls = ({
         {/* Play/Pause Button */}
         <button
           onClick={isRunning ? onPauseTimer : onStartTimer}
+          disabled={disabled}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
             padding: '12px',
-            backgroundColor: isRunning ? '#f56565' : '#48bb78',
+            backgroundColor: disabled ? '#4a5568' : 
+                           isRunning ? '#f56565' : '#48bb78',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             fontSize: '14px',
             fontWeight: 'bold',
             transition: 'all 0.2s'
           }}
           onMouseOver={(e) => {
-            e.target.style.transform = 'translateY(-1px)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(-1px)';
+            }
           }}
           onMouseOut={(e) => {
-            e.target.style.transform = 'translateY(0)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(0)';
+            }
           }}
         >
           {isRunning ? <Pause size={16} /> : <Play size={16} />}
@@ -104,26 +121,31 @@ const TimerControls = ({
         {/* Reset Button */}
         <button
           onClick={onResetCurrentBand}
+          disabled={disabled}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
             padding: '12px',
-            backgroundColor: '#ed8936',
+            backgroundColor: disabled ? '#4a5568' : '#ed8936',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             fontSize: '14px',
             fontWeight: 'bold',
             transition: 'all 0.2s'
           }}
           onMouseOver={(e) => {
-            e.target.style.transform = 'translateY(-1px)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(-1px)';
+            }
           }}
           onMouseOut={(e) => {
-            e.target.style.transform = 'translateY(0)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(0)';
+            }
           }}
         >
           <RotateCcw size={16} />
@@ -133,30 +155,32 @@ const TimerControls = ({
         {/* Next Phase Button */}
         <button
           onClick={onNextPhase}
-          disabled={currentBand.status === 'finished'}
+          disabled={disabled || currentBand.status === 'finished'}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
             padding: '12px',
-            backgroundColor: currentBand.status === 'finished' ? '#4a5568' : '#4299e1',
+            backgroundColor: (disabled || currentBand.status === 'finished') ? '#4a5568' : '#4299e1',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: currentBand.status === 'finished' ? 'not-allowed' : 'pointer',
+            cursor: (disabled || currentBand.status === 'finished') ? 'not-allowed' : 'pointer',
             fontSize: '14px',
             fontWeight: 'bold',
-            opacity: currentBand.status === 'finished' ? 0.6 : 1,
+            opacity: (disabled || currentBand.status === 'finished') ? 0.6 : 1,
             transition: 'all 0.2s'
           }}
           onMouseOver={(e) => {
-            if (currentBand.status !== 'finished') {
+            if (!disabled && currentBand.status !== 'finished') {
               e.target.style.transform = 'translateY(-1px)';
             }
           }}
           onMouseOut={(e) => {
-            e.target.style.transform = 'translateY(0)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(0)';
+            }
           }}
         >
           <SkipForward size={16} />
@@ -166,36 +190,53 @@ const TimerControls = ({
         {/* Next Band Button */}
         <button
           onClick={onNextBand}
-          disabled={!hasNextBand}
+          disabled={disabled || !hasNextBand}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
             padding: '12px',
-            backgroundColor: hasNextBand ? '#9f7aea' : '#4a5568',
+            backgroundColor: (disabled || !hasNextBand) ? '#4a5568' : '#9f7aea',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: hasNextBand ? 'pointer' : 'not-allowed',
+            cursor: (disabled || !hasNextBand) ? 'not-allowed' : 'pointer',
             fontSize: '14px',
             fontWeight: 'bold',
-            opacity: hasNextBand ? 1 : 0.6,
+            opacity: (disabled || !hasNextBand) ? 0.6 : 1,
             transition: 'all 0.2s'
           }}
           onMouseOver={(e) => {
-            if (hasNextBand) {
+            if (!disabled && hasNextBand) {
               e.target.style.transform = 'translateY(-1px)';
             }
           }}
           onMouseOut={(e) => {
-            e.target.style.transform = 'translateY(0)';
+            if (!disabled) {
+              e.target.style.transform = 'translateY(0)';
+            }
           }}
         >
           <ChevronRight size={16} />
           Siguiente Banda
         </button>
       </div>
+
+      {disabled && (
+        <div style={{
+          marginTop: '12px',
+          padding: '8px 12px',
+          backgroundColor: '#f6ad55',
+          color: '#1a1a1a',
+          borderRadius: '6px',
+          fontSize: '12px',
+          textAlign: 'center',
+          fontWeight: '600'
+        }}>
+          Los controles están deshabilitados. Solo el dispositivo principal puede controlar el timer.
+        </div>
+      )}
     </div>
   );
 };
