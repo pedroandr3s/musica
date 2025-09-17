@@ -1,320 +1,286 @@
 import React from 'react';
-import { Monitor, Users, Download, Upload, Volume2, VolumeX, Settings } from 'lucide-react';
 
 const WindowControls = ({
   soundEnabled,
   autoMode,
   setSoundEnabled,
   setAutoMode,
-  onOpenDisplayWindow,
+  onOpenDisplayWindow, // Mantener para compatibilidad hacia atrás
   onOpenBandWindow,
   onExportSchedule,
   onImportSchedule,
   onSwitchToBandView,
-  onReloadBands
+  onReloadBands,
+  hideDisplayButton = false // Nueva prop para ocultar el botón de display
 }) => {
   return (
     <div style={{
       backgroundColor: '#2d3748',
       padding: '20px',
-      borderRadius: '8px',
+      borderRadius: '12px',
       marginBottom: '20px'
     }}>
       <h3 style={{
-        color: 'white',
-        fontSize: '18px',
-        fontWeight: 'bold',
-        marginBottom: '16px',
-        margin: '0 0 16px 0'
+        margin: '0 0 15px 0',
+        color: '#e2e8f0',
+        fontSize: '1.2rem'
       }}>
-        Controles y Configuración
+        Controles de Ventana
       </h3>
 
-      {/* Settings Row */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '12px',
-        marginBottom: '20px'
+        gap: '12px'
       }}>
-        {/* Sound Toggle */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '8px',
-          backgroundColor: '#4a5568',
-          borderRadius: '6px'
-        }}>
+        {/* Botón Abrir Display - Solo mostrar si hideDisplayButton es false */}
+        {!hideDisplayButton && onOpenDisplayWindow && (
           <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={onOpenDisplayWindow}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              backgroundColor: soundEnabled ? '#48bb78' : '#f56565',
+              padding: '12px 20px',
+              backgroundColor: '#4299e1',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '600',
               cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-          </button>
-          <span style={{ color: 'white', fontSize: '14px' }}>
-            Sonido {soundEnabled ? 'activado' : 'desactivado'}
-          </span>
-        </div>
-
-        {/* Auto Mode Toggle */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '8px',
-          backgroundColor: '#4a5568',
-          borderRadius: '6px'
-        }}>
-          <button
-            onClick={() => setAutoMode(!autoMode)}
-            style={{
+              transition: 'all 0.2s',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              backgroundColor: autoMode ? '#48bb78' : '#f56565',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
+              gap: '8px',
+              justifyContent: 'center'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#3182ce';
+              e.target.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#4299e1';
+              e.target.style.transform = 'translateY(0)';
             }}
           >
-            <Settings size={14} />
+            <span>📺</span>
+            Abrir Display
           </button>
-          <span style={{ color: 'white', fontSize: '14px' }}>
-            Modo {autoMode ? 'automático' : 'manual'}
-          </span>
-        </div>
-      </div>
-
-      {/* Window Controls */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-        gap: '12px',
-        marginBottom: '20px'
-      }}>
-        <button
-          onClick={onOpenDisplayWindow}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#4299e1',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = '#3182ce';
-            e.target.style.transform = 'translateY(-1px)';
-          }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = '#4299e1';
-            e.target.style.transform = 'translateY(0)';
-          }}
-        >
-          <Monitor size={16} />
-          Abrir Display
-        </button>
+        )}
 
         <button
           onClick={onOpenBandWindow}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#9f7aea',
+            padding: '12px 20px',
+            backgroundColor: '#38a169',
             color: 'white',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: '8px',
+            fontSize: '1rem',
+            fontWeight: '600',
             cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            justifyContent: 'center'
           }}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = '#805ad5';
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#2f855a';
             e.target.style.transform = 'translateY(-1px)';
           }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = '#9f7aea';
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#38a169';
             e.target.style.transform = 'translateY(0)';
           }}
         >
-          <Users size={16} />
+          <span>🎸</span>
           Vista Banda
         </button>
 
         <button
           onClick={onSwitchToBandView}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#38a169',
+            padding: '12px 20px',
+            backgroundColor: '#9f7aea',
             color: 'white',
             border: 'none',
-            borderRadius: '6px',
+            borderRadius: '8px',
+            fontSize: '1rem',
+            fontWeight: '600',
             cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            justifyContent: 'center'
           }}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = '#2f855a';
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#805ad5';
             e.target.style.transform = 'translateY(-1px)';
           }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = '#38a169';
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#9f7aea';
             e.target.style.transform = 'translateY(0)';
           }}
         >
-          <Users size={16} />
-          Panel Banda
-        </button>
-
-        <button
-          onClick={onReloadBands}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#ed8936',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = '#dd6b20';
-            e.target.style.transform = 'translateY(-1px)';
-          }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = '#ed8936';
-            e.target.style.transform = 'translateY(0)';
-          }}
-        >
-          <Settings size={16} />
-          Recargar Firebase
+          <span>📱</span>
+          Modo Banda
         </button>
       </div>
 
-      {/* Import/Export */}
+      {/* Configuración */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '12px'
+        marginTop: '20px',
+        paddingTop: '20px',
+        borderTop: '1px solid #4a5568'
       }}>
-        <button
-          onClick={onExportSchedule}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '12px',
-            backgroundColor: '#48bb78',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = '#38a169';
-            e.target.style.transform = 'translateY(-1px)';
-          }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = '#48bb78';
-            e.target.style.transform = 'translateY(0)';
-          }}
-        >
-          <Download size={16} />
-          Exportar
-        </button>
+        <h4 style={{
+          margin: '0 0 12px 0',
+          color: '#e2e8f0',
+          fontSize: '1rem'
+        }}>
+          Configuración
+        </h4>
 
-        <label style={{
+        <div style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          padding: '12px',
-          backgroundColor: '#4299e1',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          transition: 'all 0.2s'
-        }}
-        onMouseOver={(e) => {
-          e.target.style.backgroundColor = '#3182ce';
-          e.target.style.transform = 'translateY(-1px)';
-        }}
-        onMouseOut={(e) => {
-          e.target.style.backgroundColor = '#4299e1';
-          e.target.style.transform = 'translateY(0)';
-        }}
-        >
-          <Upload size={16} />
-          Importar
-          <input
-            type="file"
-            accept=".json"
-            onChange={onImportSchedule}
-            style={{ display: 'none' }}
-          />
-        </label>
+          flexWrap: 'wrap',
+          gap: '15px',
+          alignItems: 'center'
+        }}>
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            color: '#e2e8f0'
+          }}>
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(e) => setSoundEnabled(e.target.checked)}
+              style={{
+                width: '18px',
+                height: '18px',
+                cursor: 'pointer'
+              }}
+            />
+            🔊 Sonido
+          </label>
+
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            color: '#e2e8f0'
+          }}>
+            <input
+              type="checkbox"
+              checked={autoMode}
+              onChange={(e) => setAutoMode(e.target.checked)}
+              style={{
+                width: '18px',
+                height: '18px',
+                cursor: 'pointer'
+              }}
+            />
+            ⚡ Modo Automático
+          </label>
+        </div>
       </div>
 
-      {/* Info Text */}
+      {/* Controles de Archivo */}
       <div style={{
-        marginTop: '16px',
-        fontSize: '12px',
-        color: '#a0aec0',
-        lineHeight: 1.4
+        marginTop: '20px',
+        paddingTop: '20px',
+        borderTop: '1px solid #4a5568'
       }}>
-        <p style={{ margin: '0 0 4px 0' }}>
-          • <strong>Display:</strong> Ventana de proyección para el público
-        </p>
-        <p style={{ margin: '0 0 4px 0' }}>
-          • <strong>Vista Banda:</strong> Panel simplificado para las bandas
-        </p>
-        <p style={{ margin: '0' }}>
-          • <strong>Modo Auto:</strong> Avanza automáticamente entre fases
-        </p>
+        <h4 style={{
+          margin: '0 0 12px 0',
+          color: '#e2e8f0',
+          fontSize: '1rem'
+        }}>
+          Datos
+        </h4>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+          gap: '10px'
+        }}>
+          <button
+            onClick={onExportSchedule}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#d69e2e',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#b7791f';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#d69e2e';
+            }}
+          >
+            📤 Exportar
+          </button>
+
+          <label style={{
+            padding: '10px 16px',
+            backgroundColor: '#805ad5',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '0.9rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            textAlign: 'center'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#6b46c1';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#805ad5';
+          }}>
+            📥 Importar
+            <input
+              type="file"
+              accept=".json"
+              onChange={onImportSchedule}
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          <button
+            onClick={onReloadBands}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#319795',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#2c7a7b';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#319795';
+            }}
+          >
+            🔄 Recargar
+          </button>
+        </div>
       </div>
     </div>
   );
